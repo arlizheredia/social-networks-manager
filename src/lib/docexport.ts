@@ -4,21 +4,31 @@
  */
 import { download, esc } from './util'
 
+/** Todos los informes: hoja Carta, Arial (o Liberation Sans) a 12 pt y alineados a la izquierda. */
+const FONT = 'Arial, "Liberation Sans", sans-serif'
+const page = () => ({ css: 'letter', word: '8.5in 11.0in' })
+
 const CSS = (mono: boolean) => `
-  @page { size: A4; margin: 2cm; }
-  body { font-family: ${mono ? 'Arial, "Liberation Sans", sans-serif' : 'Calibri, Arial, "Liberation Sans", sans-serif'}; font-size: ${mono ? '12pt' : '11pt'}; line-height: 1.45; color: #1f1f1f; max-width: 820px; margin: 0 auto; }
-  h1 { font-size: ${mono ? '16pt' : '20pt'}; margin: 0 0 6pt; color: ${mono ? '#000' : '#0b57d0'}; }
-  h2 { font-size: ${mono ? '13pt' : '14pt'}; margin: 18pt 0 6pt; color: ${mono ? '#000' : '#0b57d0'}; border-bottom: 1px solid #c4c7c5; padding-bottom: 3pt; }
-  h3 { font-size: 12pt; margin: 12pt 0 4pt; }
-  p, li { margin: 0 0 6pt; }
+  @page { size: ${page().css}; margin: 2cm; }
+  @page WordSection1 { size: ${page().word}; margin: 2cm; mso-page-orientation: portrait; }
+  div.WordSection1 { page: WordSection1; }
+  body { font-family: ${FONT}; font-size: 12pt; line-height: 1.45; color: ${mono ? '#000' : '#1f1f1f'}; max-width: 820px; margin: 0 auto; text-align: left; }
+  h1, h2, h3, p, td, th, .h1, .h2, .h3 { text-align: left; margin-left: 0; padding-left: 0; text-indent: 0; }${mono ? '\n  a, .muted, blockquote { color: #000; }' : ''}
+  h1 { font-family: ${FONT}; font-size: 16pt; margin-top: 0; margin-right: 0; margin-bottom: 6pt; margin-left: 0; color: ${mono ? '#000' : '#0b57d0'}; }
+  h2 { font-family: ${FONT}; font-size: 13pt; margin-top: 18pt; margin-right: 0; margin-bottom: 6pt; margin-left: 0; color: ${mono ? '#000' : '#0b57d0'}; border-bottom: 1px solid ${mono ? '#000' : '#c4c7c5'}; padding-bottom: 3pt; }
+  h3 { font-family: ${FONT}; font-size: 12pt; margin-top: 12pt; margin-right: 0; margin-bottom: 4pt; margin-left: 0; }
+  p.h1 { font-family: ${FONT}; font-size: 16pt; font-weight: bold; margin-top: 0; margin-right: 0; margin-bottom: 6pt; margin-left: 0; color: ${mono ? '#000' : '#0b57d0'}; }
+  p.h2 { font-family: ${FONT}; font-size: 13pt; font-weight: bold; margin-top: 18pt; margin-right: 0; margin-bottom: 6pt; margin-left: 0; color: ${mono ? '#000' : '#0b57d0'}; border-bottom: 1px solid ${mono ? '#000' : '#c4c7c5'}; padding-bottom: 3pt; }
+  p.h3 { font-family: ${FONT}; font-size: 12pt; font-weight: bold; margin-top: 12pt; margin-right: 0; margin-bottom: 4pt; margin-left: 0; }
+  p, li { margin-top: 0; margin-right: 0; margin-bottom: 6pt; margin-left: 0; font-family: ${FONT}; font-size: 12pt; }
   .kv b { display: inline-block; min-width: 140px; }
-  table { border-collapse: collapse; width: 100%; margin: 6pt 0 12pt; }
-  th, td { border: 1px solid #c4c7c5; padding: 4pt 6pt; text-align: left; vertical-align: top; font-size: 10pt; }
+  table { border-collapse: collapse; width: 100%; margin-top: 6pt; margin-right: 0; margin-bottom: 12pt; margin-left: 0; }
+  th, td { border: 1px solid #c4c7c5; padding-top: 4pt; padding-bottom: 4pt; padding-left: 6pt; padding-right: 6pt; text-align: left; vertical-align: top; font-family: ${FONT}; font-size: 12pt; }
   th { background: ${mono ? '#fff' : '#f0f4f9'}; }
   .muted { color: #5f6368; font-size: 9.5pt; }
   .pos { color: ${mono ? '#000' : '#146c2e'}; } .neg { color: ${mono ? '#000' : '#b3261e'}; }
-  blockquote { margin: 4pt 0 8pt; padding: 4pt 10pt; border-left: 3px solid #c4c7c5; }
-  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 4pt 0 10pt; }
+  blockquote { margin-top: 4pt; margin-right: 0; margin-bottom: 8pt; margin-left: 0; padding-top: 4pt; padding-bottom: 4pt; padding-left: 10pt; padding-right: 10pt; border-left: 3px solid #c4c7c5; }
+  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 4pt; margin-right: 0; margin-bottom: 10pt; margin-left: 0; }
   .bar i { display: block; }
 `
 
@@ -26,9 +36,16 @@ export function htmlDocument(title: string, body: string, mono = false) {
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS(mono)}</style></head><body>${body}</body></html>`
 }
 
+/**
+ * Word y LibreOffice aplican a <h1>…<h3> sus estilos de «Encabezado», que en muchas plantillas llevan sangría
+ * y numeración automática. En el .doc los títulos van como párrafos con el mismo aspecto: quedan alineados a la izquierda.
+ */
+export const flatHeadings = (html: string) => html.replace(/<h([123])(\s[^>]*)?>/g, '<p class="h$1">').replace(/<\/h[123]>/g, '</p>')
+
 export function downloadWord(file: string, title: string, body: string, mono = false) {
+  body = flatHeadings(body)
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40" lang="es"><head><meta charset="utf-8"><title>${esc(title)}</title>
-<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>${CSS(mono)}</style></head><body>${body}</body></html>`
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]--><style>${CSS(mono)}</style></head><body><div class="WordSection1">${body}</div></body></html>`
   download(file.replace(/\.docx?$/, '') + '.doc', '﻿' + html, 'application/msword')
 }
 

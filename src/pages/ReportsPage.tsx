@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useFitHeight } from '@/lib/useFitHeight'
 import { useSearchParams } from 'react-router-dom'
 import { Banner, Button, Card, Chip, Dialog, Empty, Field, Icon, Input, MenuItem, PageHead, Popover, Select, Tabs, Textarea, toast, confirmBox } from '@/components/ui'
 import { copyRich, copyText } from '@/lib/util'
@@ -12,7 +13,7 @@ import { setPrefs, usePrefs } from '@/features/comments/prefs'
 import { countTxt, inHistory, trackProgress, trackWhen, useTR } from '@/features/comments/tracking'
 import { useExplore } from '@/features/comments/explore'
 import { usePublisher } from '@/features/publisher/store'
-import { buildDiffusionReport, entriesOn, longDate, ymd } from '@/features/publisher/report'
+import { buildDiffusionReport, diffusionFileName, entriesOn, ymd } from '@/features/publisher/report'
 import { entryTitle } from '@/features/publisher/logic'
 
 function WhatsAppDialog({ m, open, onClose }: { m: ReportModel; open: boolean; onClose: () => void }) {
@@ -153,8 +154,11 @@ function DiffusionReport() {
   useEffect(() => { setIds(new Set(entriesOn(date).map((h) => h.id))) }, [date, state.history.length])
   const regen = () => { setText(buildDiffusionReport(date, [...ids], meta)); setDirty(false) }
   useEffect(() => { if (!dirty) regen() }, [ids, rep.author, rep.client, date]) // eslint-disable-line react-hooks/exhaustive-deps
-  const title = `Informe de difusión · ${longDate(date)}`
-  const file = `informe-difusion-${date}`
+  const file = diffusionFileName(date)
+  // el texto ocupa el alto disponible: los botones quedan a 40 px del final de la ventana
+  const areaRef = useRef<HTMLTextAreaElement>(null), actionsRef = useRef<HTMLDivElement>(null)
+  useFitHeight(areaRef, actionsRef, { margin: 40, deps: [entries.length] })
+  const title = file
   return (
     <Card>
       <div className="grid gap-x-4 sm:grid-cols-3">
@@ -168,13 +172,13 @@ function DiffusionReport() {
           <label key={h.id} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={ids.has(h.id)} onChange={(e) => { const s = new Set(ids); e.target.checked ? s.add(h.id) : s.delete(h.id); setIds(s) }} /><span className="truncate">{entryTitle(h).slice(0, 90)}</span></label>
         ))}</div>
       ) : <p className="mb-4 text-text-2">No hay publicaciones en esa fecha.</p>}
-      <Field label="Texto del informe · puedes editarlo antes de copiarlo o exportarlo"><Textarea rows={16} className="font-mono text-xs" value={text} onChange={(e) => { setText(e.target.value); setDirty(true) }} /></Field>
-      <div className="flex flex-wrap gap-2">
+      <Field label="Texto del informe · puedes editarlo antes de copiarlo o exportarlo"><Textarea ref={areaRef} className="min-h-40 font-mono text-xs" value={text} onChange={(e) => { setText(e.target.value); setDirty(true) }} /></Field>
+      <div ref={actionsRef} className="flex flex-wrap gap-2">
         <Button variant="text" icon="refresh" onClick={async () => { if (!dirty || (await confirmBox('¿Regenerar el informe?', 'Se perderán los cambios que hayas hecho en el texto.', 'Regenerar'))) regen() }}>Regenerar</Button>
         <span className="flex-1" />
         <Button variant="outlined" icon="content_copy" onClick={async () => toast((await copyText(text)) ? 'Informe copiado' : 'No se pudo copiar')}>Copiar</Button>
-        <Button variant="outlined" icon="description" onClick={() => downloadWord(file, title, reportTextToHtml(text))}>Word</Button>
-        <Button icon="picture_as_pdf" onClick={() => printPdf(title, reportTextToHtml(text))}>PDF</Button>
+        <Button variant="outlined" icon="description" onClick={() => downloadWord(file, title, reportTextToHtml(text), true)}>Word</Button>
+        <Button icon="picture_as_pdf" onClick={() => printPdf(title, reportTextToHtml(text), true)}>PDF</Button>
       </div>
     </Card>
   )

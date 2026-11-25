@@ -12,6 +12,10 @@ const NUMW = ['Ninguna', 'Una', 'Dos', 'Tres', 'Cuatro', 'Cinco', 'Seis', 'Siete
 const startNum = (n: number) => (n <= 10 ? NUMW[n] : String(n))
 const listNames = (a0: string[]) => { const a = [...new Set(a0)].map((n) => `«${n}»`); return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' y ' + a[a.length - 1] }
 const clip = (t: string, n: number) => (t.length > n ? t.slice(0, n).replace(/\s+\S*$/, '') + '…' : t)
+/** Título dentro del informe (sin fecha: la fecha va en su propia línea «Fecha:»). */
+export const DIFFUSION_TITLE = 'Informe de difusión en grupos de Facebook'
+/** Nombre del archivo exportado, con la fecha: «Informe de difusión en grupos de Facebook-25-11-2026». */
+export const diffusionFileName = (d: string) => { const [y, m, dd] = d.split('-'); return `${DIFFUSION_TITLE}-${dd}-${m}-${y}` }
 export function longDate(d: string) { const [y, m, dd] = d.split('-').map(Number); return new Date(y, m - 1, dd).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) }
 function sharedText(h: HistoryEntry) {
   return String(h.text || '').replace(/\{grupo\}/gi, '(nombre del grupo)').replace(/\{fecha\}/gi, '(fecha)').replace(/\{enlace\}/gi, '(enlace)')
@@ -24,7 +28,7 @@ export const entriesOn = (date: string) => getPub().history.filter((h) => h.item
 
 export function buildDiffusionReport(date: string, ids: string[], meta: { author: string; brand: string }) {
   const E = getPub().history.filter((h) => ids.includes(h.id)).map((h) => ({ h, its: h.items.filter((i) => itemDay(h, i) === date) })).filter((x) => x.its.length)
-  const L = ['Informe de difusión en grupos de Facebook', `Fecha: ${cap(longDate(date))}`]
+  const L = [DIFFUSION_TITLE, `Fecha: ${cap(longDate(date))}`]
   if (meta.author) L.push(`Elaborado por: ${meta.author}`)
   if (meta.brand) L.push(`Cliente / marca: ${meta.brand}`)
   L.push('', 'Resumen')
@@ -63,14 +67,6 @@ export function buildDiffusionReport(date: string, ids: string[], meta: { author
   all.filter((i) => i.status === 'pending' && i.error).forEach((i) => O.push(`No se pudo compartir en ${listNames([i.name])}: Facebook mostró un aviso de seguridad («${clip(cleanErr(i.error).replace(/[«»]/g, '"'), 200)}») y se detuvo la difusión para proteger la cuenta.`))
   rej.forEach((i) => O.push(`La publicación fue rechazada por los administradores de ${listNames([i.name])}.`))
   if (O.length) { L.push('Observaciones'); O.forEach((o) => L.push('- ' + o)); L.push('') }
-  const N: string[] = []
-  if (aw.length) N.push(aw.length === 1 ? `Comprobar si se aprobó la publicación en ${listNames(aw.map((i) => i.name))}.` : `Comprobar si se aprobaron las publicaciones en ${listNames(aw.map((i) => i.name))}.`)
-  const nm = sk.filter((i) => /miembro/i.test(i.error || ''))
-  if (nm.length) N.push(`Solicitar acceso a ${listNames(nm.map((i) => i.name))}.`)
-  if (pe.length) N.push(`Completar la difusión en ${pl(pe.length, 'grupo pendiente', 'grupos pendientes')}.`)
-  L.push('Próximos pasos')
-  if (N.length) N.forEach((n) => L.push('- ' + n))
-  else L.push('Sin tareas pendientes de esta jornada.')
   return L.join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
