@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Banner, Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, Select, Textarea, confirmBox, toast } from '@/components/ui'
+import { Banner, Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, NumberField, Select, Textarea, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText } from '@/lib/util'
 import { useExtension } from '@/features/extension/bridge'
@@ -66,7 +66,7 @@ function TrackDialog({ open, onClose, postIds, edit }: { open: boolean; onClose:
         <div className="rounded-2xl bg-surface-2 p-3">
           <div className="mb-2 text-sm font-medium">Comentarios de Facebook</div>
           <Field label="Comentarios a revisar"><Select value={order} onChange={(e) => setOrder(e.target.value as typeof order)}><option value="all">Todos los comentarios</option><option value="pert">Más pertinentes</option><option value="rec">Más recientes</option></Select></Field>
-          <div className="flex items-center gap-3"><span className="text-sm">Máximo por publicación</span><input type="number" min={50} step={50} disabled={noLimit} className="h-10 w-28 rounded-xl border border-outline bg-surface px-3 disabled:opacity-50" value={limit} onChange={(e) => setLimit(+e.target.value)} /><Chip selected={noLimit} onClick={() => setNoLimit(!noLimit)}>Sin límite</Chip></div>
+          <div className="flex items-center gap-3"><span className="text-sm">Máximo por publicación</span><NumberField label="Máximo de comentarios por publicación" min={50} max={100000} step={50} disabled={noLimit} className="w-28" value={limit} onChange={setLimit} onOutOfRange={(_, f) => toast(`El máximo por publicación debe ser al menos 50: se usa ${f}`)} /><Chip selected={noLimit} onClick={() => setNoLimit(!noLimit)}>Sin límite</Chip></div>
         </div>
       )}
     </Dialog>

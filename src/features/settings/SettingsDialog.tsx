@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Button, Chip, Dialog, Icon, Select, Toggle, confirmBox, toast } from '@/components/ui'
+import { Button, Chip, Dialog, Icon, NumberField, Select, Toggle, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { useSettings, type ThemeMode } from '@/store/settings'
 import { AIPanel } from '@/features/ai/AIDialog'
@@ -27,8 +27,8 @@ function Row({ title, sub, children }: { title: ReactNode; sub?: ReactNode; chil
     </div>
   )
 }
-const Num = (p: { value: number; min: number; max: number; step?: number; onChange: (v: number) => void }) => (
-  <input type="number" className="h-10 w-24 rounded-xl border border-outline bg-surface px-3" value={p.value} min={p.min} max={p.max} step={p.step ?? 1} onChange={(e) => p.onChange(+e.target.value)} />
+const Num = (p: { value: number; min: number; max: number; step?: number; onChange: (v: number) => void; onOutOfRange?: (typed: number, fixed: number) => void }) => (
+  <NumberField value={p.value} min={p.min} max={p.max} step={p.step} onChange={p.onChange} onOutOfRange={p.onOutOfRange} />
 )
 
 export function SettingsDialog({ open, onClose, initial = 'general' }: { open: boolean; onClose: () => void; initial?: Tab }) {
@@ -72,7 +72,7 @@ export function SettingsDialog({ open, onClose, initial = 'general' }: { open: b
               <h3 className="mb-1 text-base">Protección de la cuenta</h3>
               <p className="mb-2 text-xs text-text-2">Límites que reducen el riesgo de bloqueos. Puedes hacerlos más estrictos, pero no desactivarlos.</p>
               <Row title="Pausa entre grupos (segundos)" sub={`Mínimo ${SAFE.MIN_PAUSE} s`}>
-                <Num value={st.pause} min={SAFE.MIN_PAUSE} max={SAFE.MAX_PAUSE} step={5} onChange={(v) => { if (v < SAFE.MIN_PAUSE) toast('La pausa mínima es de 10 segundos'); updateSettings({ pause: clamp(v, SAFE.MIN_PAUSE, SAFE.MAX_PAUSE, 15) }) }} />
+                <Num value={st.pause} min={SAFE.MIN_PAUSE} max={SAFE.MAX_PAUSE} step={5} onChange={(v) => updateSettings({ pause: clamp(v, SAFE.MIN_PAUSE, SAFE.MAX_PAUSE, 15) })} onOutOfRange={(n) => { if (n < SAFE.MIN_PAUSE) toast('La pausa mínima es de 10 segundos') }} />
               </Row>
               <Row title="Máximo de grupos por día" sub="Cada grupo, como mucho una vez cada 24 h">
                 <Num value={st.dayCap} min={1} max={SAFE.MAX_DAY} onChange={(v) => updateSettings({ dayCap: v })} />

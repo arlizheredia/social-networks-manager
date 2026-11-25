@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Banner, Button, Card, Dialog, Empty, Icon, IconButton, Input, PageHead, Tabs, Textarea, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { fmtDate, fmtRelative } from '@/lib/util'
@@ -131,6 +131,14 @@ function PublishHistory() {
 function TrackingHistory() {
   const { tracks, running } = useTR()
   const nav = useNavigate()
+  // seguimiento pedido por enlace (p. ej. desde el aviso «Ver en el historial»): se muestra y se resalta
+  const [params] = useSearchParams()
+  const focus = params.get('t')
+  useEffect(() => {
+    if (!focus) return
+    const t = setTimeout(() => document.getElementById('seg-' + focus)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150)
+    return () => clearTimeout(t)
+  }, [focus, tracks.length])
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [sel, setSel] = useState<Set<string>>(new Set())
@@ -151,7 +159,7 @@ function TrackingHistory() {
       </div>
       <div className="divide-y divide-outline-2 rounded-3xl border border-outline-2 bg-surface">
         {list.map((t) => { const pr = trackProgress(t); return (
-          <div key={t.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <div key={t.id} id={'seg-' + t.id} className={cn('flex flex-wrap items-center gap-3 px-4 py-3 transition-colors', focus === t.id && 'bg-primary-container/50 first:rounded-t-3xl last:rounded-b-3xl')}>
             <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={sel.has(t.id)} onChange={(e) => { const s = new Set(sel); e.target.checked ? s.add(t.id) : s.delete(t.id); setSel(s) }} />
             <div className="min-w-48 flex-1"><div className="truncate font-medium">{t.name}{t.status === 'paused' && <span className="ml-2 rounded bg-warn-container px-1.5 text-xs text-warn">parcial</span>}</div><div className="text-xs text-text-2">{trackWhen(t)} · {countTxt(pr.n, 'publicación', 'publicaciones')} · {countTxt(pr.comments, 'comentario', 'comentarios')}</div></div>
             <IconButton icon="forum" label="Ver comentarios" onClick={async () => { if (await openTrackingComments([t.id])) nav('/comentarios/explorar') }} />
@@ -166,7 +174,9 @@ function TrackingHistory() {
 }
 
 export default function HistoryPage() {
-  const [tab, setTab] = useState<'pub' | 'seg'>('pub')
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<'pub' | 'seg'>(params.get('tab') === 'seg' ? 'seg' : 'pub')
+  useEffect(() => { if (params.get('tab') === 'seg') setTab('seg') }, [params])
   const pend = usePublisher((s) => s.history.filter((h) => h.items.some((i) => i.status === 'pending')).length + awaitingItems(s.history).length)
   return (
     <div>

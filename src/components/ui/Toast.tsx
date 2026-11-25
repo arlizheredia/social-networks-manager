@@ -1,15 +1,18 @@
 import { create } from 'zustand'
 import { Icon } from './Icon'
 
-interface ToastItem { id: number; text: string; icon?: string }
+export interface ToastAction { label: string; href?: string; onClick?: () => void }
+interface ToastItem { id: number; text: string; icon?: string; action?: ToastAction }
 const useToasts = create<{ items: ToastItem[] }>(() => ({ items: [] }))
 let seq = 0
 
-/** Muestra un aviso breve en la parte inferior. */
-export function toast(text: string, icon?: string) {
+const close = (id: number) => useToasts.setState((s) => ({ items: s.items.filter((t) => t.id !== id) }))
+
+/** Muestra un aviso breve en la parte inferior. Con acción, dura más para dar tiempo a pulsarla. */
+export function toast(text: string, icon?: string, action?: ToastAction) {
   const id = ++seq
-  useToasts.setState((s) => ({ items: [...s.items.slice(-2), { id, text, icon }] }))
-  setTimeout(() => useToasts.setState((s) => ({ items: s.items.filter((t) => t.id !== id) })), 3800)
+  useToasts.setState((s) => ({ items: [...s.items.slice(-2), { id, text, icon, action }] }))
+  setTimeout(() => close(id), action ? 10000 : 3800)
 }
 
 export function Toaster() {
@@ -19,7 +22,10 @@ export function Toaster() {
       {items.map((t) => (
         <div key={t.id} className="pointer-events-auto flex max-w-xl items-center gap-3 rounded-xl bg-text px-4 py-3 text-sm text-bg shadow-3">
           {t.icon && <Icon name={t.icon} className="!text-[20px]" />}
-          {t.text}
+          <span className="min-w-0 flex-1">{t.text}</span>
+          {t.action && (t.action.href
+            ? <a href={t.action.href} onClick={() => { t.action!.onClick?.(); close(t.id) }} className="shrink-0 font-medium text-primary-container no-underline hover:underline">{t.action.label}</a>
+            : <button onClick={() => { t.action!.onClick?.(); close(t.id) }} className="shrink-0 font-medium text-primary-container hover:underline">{t.action.label}</button>)}
         </div>
       ))}
     </div>

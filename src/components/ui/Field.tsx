@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import { forwardRef, useEffect, useState, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { cn } from '@/lib/cn'
 import { Icon } from './Icon'
 
@@ -32,7 +32,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cn(base, 'h-10 cursor-pointer pr-8', className)} {...rest}>
+    <select className={cn(base, 'snm-select h-10 cursor-pointer pr-10', className)} {...rest}>
       {children}
     </select>
   )
@@ -86,5 +86,50 @@ export function Chip({ selected, onClick, children, icon }: { selected?: boolean
       {selected ? <Icon name="check" /> : icon && <Icon name={icon} />}
       {children}
     </button>
+  )
+}
+
+/**
+ * Campo numérico que se puede borrar y reescribir con libertad: mientras se escribe solo se guarda un valor
+ * válido y dentro del rango; al salir del campo se ajusta al rango (o se recupera el último valor si quedó vacío).
+ */
+export function NumberField({ value, onChange, min, max, step = 1, disabled, className, label, onOutOfRange }: {
+  value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; className?: string; label?: string
+  /** Aviso opcional cuando al salir del campo el número estaba fuera del rango. */
+  onOutOfRange?: (typed: number, fixed: number) => void
+}) {
+  const [text, setText] = useState(String(value))
+  const [editing, setEditing] = useState(false)
+  useEffect(() => { if (!editing) setText(String(value)) }, [value, editing])
+  const inRange = (n: number) => (min == null || n >= min) && (max == null || n <= max)
+  const clampN = (n: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n))
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      aria-label={label}
+      min={min}
+      max={max}
+      step={step}
+      disabled={disabled}
+      value={text}
+      onFocus={() => setEditing(true)}
+      onChange={(e) => {
+        setText(e.target.value)
+        const n = Number(e.target.value)
+        if (e.target.value.trim() !== '' && Number.isFinite(n) && inRange(n)) onChange(n)
+      }}
+      onBlur={() => {
+        setEditing(false)
+        const n = Number(text)
+        if (text.trim() === '' || !Number.isFinite(n)) { setText(String(value)); return }
+        const fixed = clampN(Math.round(n))
+        if (fixed !== n) onOutOfRange?.(n, fixed)
+        if (fixed !== value) onChange(fixed)
+        setText(String(fixed))
+      }}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      className={cn('h-10 w-24 rounded-xl border border-outline bg-surface px-3 text-text disabled:opacity-50', className)}
+    />
   )
 }

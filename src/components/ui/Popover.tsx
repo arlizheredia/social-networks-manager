@@ -16,7 +16,12 @@ export function Popover({ trigger, children, className, align = 'left' }: { trig
     <div ref={ref} className="relative inline-flex">
       {trigger(() => setOpen((o) => !o), open)}
       {open && (
-        <div className={cn('absolute top-full z-40 mt-1 max-h-[60vh] min-w-56 overflow-y-auto rounded-2xl bg-surface-2 p-2 shadow-3', align === 'right' ? 'right-0' : 'left-0', className)}>
+        <div className={cn(
+          'absolute top-full z-40 mt-1 max-h-[60vh] max-w-[calc(100vw-32px)] min-w-56 overflow-y-auto rounded-2xl bg-surface-2 p-2 shadow-3',
+          // sin ancho propio, el menú crece hasta que cada opción cabe en una línea
+          !/(^|\s)w-/.test(className ?? '') && 'w-max',
+          align === 'right' ? 'right-0' : 'left-0', className,
+        )}>
           {children(() => setOpen(false))}
         </div>
       )}
@@ -28,7 +33,7 @@ export function MenuItem({ icon, children, onClick, sub, danger }: { icon?: stri
   return (
     <button onClick={onClick} className={cn('flex w-full items-start gap-3 rounded-xl px-3 py-2 text-left hover:bg-text/8', danger && 'text-error')}>
       {icon && <span className="ms !text-[20px]">{icon}</span>}
-      <span className="min-w-0 flex-1"><span className="block">{children}</span>{sub && <span className="block truncate text-xs text-text-2">{sub}</span>}</span>
+      <span className="min-w-0 flex-1"><span className="block truncate">{children}</span>{sub && <span className="block truncate text-xs text-text-2">{sub}</span>}</span>
     </button>
   )
 }
