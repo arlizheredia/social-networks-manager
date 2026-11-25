@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Banner, Button, Card, Chip, Dialog, Empty, Field, Icon, IconButton, Input, PageHead, Switch, Textarea, confirmBox, toast } from '@/components/ui'
+import { Banner, Button, Card, Chip, Dialog, Empty, Field, Icon, IconButton, Input, PageHead, Switch, Textarea, Toggle, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText, download, fmtRelative } from '@/lib/util'
 import { downloadWord, printPdf, reportTextToHtml } from '@/lib/docexport'
@@ -87,7 +87,7 @@ function ReportDialog({ open, onClose, checked }: { open: boolean; onClose: () =
       <div className="mb-3 flex flex-wrap items-center gap-2"><span className="text-xs text-text-2">Incluir:</span>
         {(['link', 'tags', 'notes', 'last'] as const).map((k) => <Chip key={k} selected={inc[k]} onClick={() => setInc({ ...inc, [k]: !inc[k] })}>{{ link: 'Enlace', tags: 'Etiquetas', notes: 'Notas', last: 'Último uso' }[k]}</Chip>)}
       </div>
-      <Field label="Texto del reporte · Word y PDF en Arial 12, blanco y negro"><Textarea rows={14} className="font-mono text-xs" value={text} onChange={(e) => setText(e.target.value)} /></Field>
+      <Field label="Texto del reporte · Word y PDF en hoja Carta, Arial 12, blanco y negro"><Textarea rows={9} className="min-h-40 font-mono text-xs" value={text} onChange={(e) => setText(e.target.value)} /></Field>
     </Dialog>
   )
 }
@@ -172,7 +172,7 @@ export default function GroupsPage() {
           <label className="flex items-center gap-3 border-b border-outline-2 bg-surface-2 px-4 py-2 text-xs text-text-2">
             <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={list.every((g) => checked.has(g.id))} onChange={(e) => { const s = new Set(checked); list.forEach((g) => (e.target.checked ? s.add(g.id) : s.delete(g.id))); setChecked(s) }} />
             <span className="flex-1">{list.length} grupo{list.length > 1 ? 's' : ''} · {groups.filter((g) => g.active).length} activos</span>
-            <span className="hidden w-28 sm:block">Último uso</span><span className="w-12">Activo</span><span className="w-18" />
+            <span className="hidden w-28 sm:block">Último uso</span><span className="w-14 text-center">Activo</span><span className="w-18" />
           </label>
           {list.map((g) => (
             <div key={g.id} className={cn('flex items-center gap-3 border-b border-outline-2 px-4 py-2.5 last:border-0', !g.active && 'opacity-60')}>
@@ -188,7 +188,7 @@ export default function GroupsPage() {
                 </div>
               </div>
               <span className="hidden w-28 text-xs text-text-2 sm:block">{g.lastShared ? fmtRelative(g.lastShared) : 'Nunca'}</span>
-              <span className="w-12"><input type="checkbox" role="switch" className="size-5 accent-[var(--primary)]" checked={g.active} aria-label="Activo" onChange={(e) => { setActive([g.id], e.target.checked); toast(`«${g.name}» ${e.target.checked ? 'activado' : 'desactivado'}`) }} /></span>
+              <span className="flex w-14 justify-center"><Toggle checked={g.active} label={`${g.name}: ${g.active ? 'activo' : 'inactivo'}`} onChange={(v) => { setActive([g.id], v); toast(`«${g.name}» ${v ? 'activado' : 'desactivado'}`) }} /></span>
               <span className="flex w-18"><IconButton size="sm" icon="edit" label="Editar" onClick={() => setEdit({ open: true, g })} /><IconButton size="sm" icon="delete" label="Eliminar" onClick={() => del([g.id])} /></span>
             </div>
           ))}

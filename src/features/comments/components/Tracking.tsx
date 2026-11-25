@@ -102,7 +102,7 @@ function PostsCard({ onTrack }: { onTrack: (ids: string[]) => void }) {
       {!!posts.length && (
         <>
           <div className="mt-4 mb-2 flex flex-wrap items-center gap-2">
-            <input type="checkbox" aria-label="Seleccionar todas" className="size-4 accent-[var(--primary)]" checked={list.length > 0 && list.every((p) => sel.has(p.id))} onChange={(e) => setSel(e.target.checked ? new Set(list.map((p) => p.id)) : new Set())} />
+            <input type="checkbox" aria-label="Seleccionar todas" className="ml-[13px] size-4 shrink-0 accent-[var(--primary)]" checked={list.length > 0 && list.every((p) => sel.has(p.id))} onChange={(e) => setSel(e.target.checked ? new Set(list.map((p) => p.id)) : new Set())} />
             <div className="min-w-40 flex-1"><Input icon="search" className="!h-10" placeholder="Buscar publicación" value={q} onChange={(e) => setQ(e.target.value)} /></div>
             {ids.length > 0 && <>
               <Button size="sm" variant="text" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar publicaciones?', `Se quitarán ${ids.length} de la lista. Los comentarios ya guardados se conservan en los seguimientos.`, 'Eliminar', true)) { await deletePosts(ids); setSel(new Set()) } }}>Eliminar</Button>
