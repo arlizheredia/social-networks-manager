@@ -42,6 +42,12 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     handlePost(msg.job).then(r => { notifyResult(msg.job, r); return r; }).then(send, e => send({ok: false, step: 'ext', error: String((e && e.message) || e)})).finally(() => { busy = false; });
     return true;
   }
+  if (msg.cmd === 'reply') {
+    if (busy) { send({ok: false, step: 'ext', error: 'Ya hay una publicación en curso'}); return; }
+    busy = true;
+    handleReply(msg.job).then(send, e => send({ok: false, step: 'ext', error: String((e && e.message) || e)})).finally(() => { busy = false; });
+    return true;
+  }
   if (msg.cmd === 'checkUpdate') { checkUpdate().then(send, e => send({ok: false, error: String(e && e.message || e)})); return true; }
   if (msg.cmd === 'update') { openUpdater(!!(msg.job && msg.job.auto)).then(() => send({ok: true}), e => send({ok: false, error: String(e && e.message || e)})); return true; }
   if (msg.cmd === 'badge') { setBadge(typeof msg.job?.text === 'string' ? msg.job.text.slice(0, 4) : ''); send({ok: true}); return; }
@@ -253,6 +259,27 @@ async function openGroup(url, mode) {
   }
   const ok = await loaded;
   return ok ? tabId : null;
+}
+
+/* Responder a un comentario de Facebook con la sesión del usuario */
+const validReply = j => j && typeof j === 'object' && typeof j.url === 'string' && /^https:\/\/(www|web|m)\.facebook\.com\//.test(j.url) && /comment_id=/.test(j.url) &&
+  typeof j.text === 'string' && j.text.trim().length > 0 && j.text.length <= 8000 && (j.win == null || ['nofocus', 'tab', 'minimized', 'focused'].includes(j.win));
+async function handleReply(job) {
+  if (!validReply(job)) return {ok: false, step: 'ext', error: 'Datos de la respuesta no válidos (falta el enlace del comentario)'};
+  const st = await checkStatus();
+  if (st.loggedIn === false) return {ok: false, step: 'login', error: 'No has iniciado sesión en Facebook en este navegador.'};
+  progress('Abriendo el comentario…');
+  const url = job.url.replace(/^https:\/\/(web|m)\./, 'https://www.');
+  const tabId = await openGroup(url, job.win);
+  if (tabId == null) return {ok: false, step: 'load', error: 'La publicación no terminó de cargar'};
+  let r = null;
+  for (let i = 0; i < 30 && !r; i++) {
+    try { r = await chrome.tabs.sendMessage(tabId, {cmd: 'reply', job}); } catch { /* fb.js aún no está listo */ }
+    if (!r) await sleep(500);
+  }
+  if (!r) return {ok: false, step: 'load', error: 'No se pudo conectar con la página de Facebook'};
+  if (r.ok && !r.test && job.close) await closeAll();
+  return r;
 }
 
 async function handlePost(job) {

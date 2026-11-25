@@ -3,8 +3,10 @@ import { Banner, Button, Dialog, Field, Icon, IconButton, Input, Switch, Textare
 import { cn } from '@/lib/cn'
 import { copyText } from '@/lib/util'
 import { useAI } from '@/features/ai/engine'
+import { publisherCommand, useExtension } from '@/features/extension/bridge'
+import { usePublisher } from '@/features/publisher/store'
 import { normName } from '../db'
-import { aiReplies, fillTemplate, markAnswered, suggestScore, useExplore } from '../explore'
+import { addReply, aiReplies, fillTemplate, markAnswered, suggestScore, useExplore } from '../explore'
 import { setPrefs, usePrefs } from '../prefs'
 import type { Comment } from '../types'
 
@@ -48,12 +50,36 @@ export function ReplyDialog({ queue, start, onClose }: { queue: Comment[]; start
   const [ai, setAi] = useState<{ for: string; items: string[]; loading: boolean } | null>(null)
   const [mention, setMention] = useState(true)
   const [q, setQ] = useState('')
+  const [sending, setSending] = useState(false)
+  /** Respuestas publicadas en esta sesión del diálogo (por comentario) */
+  const [done, setDone] = useState<Record<string, { text: string; author: string }>>({})
+  const ext = useExtension((x) => x.publisher)
+  const win = usePublisher((x) => x.settings.autoWin)
   const c = queue[i]
   const opts = c ? [...prefs.replies].filter((r) => !q || normName(r.title + ' ' + r.text).includes(normName(q))).sort((a, b) => suggestScore(b, c) - suggestScore(a, c)) : []
   useEffect(() => { if (c && opts[0]) { setSel(opts[0].id); setText(fillTemplate(opts[0].text, c)) } else setText('') }, [c?.id]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!c) return null
   const final = () => { let t = text.trim(); if (c.platform !== 'facebook' && mention) { const u = '@' + c.authorName.replace(/^@/, ''); if (!t.startsWith(u)) t = u + ' ' + t } return t }
-  const next = () => { if (i + 1 < queue.length) setI(i + 1); else { toast('No quedan más comentarios pendientes en la lista'); onClose() } }
+  /** Pasa al siguiente; en el último se queda abierto: solo el usuario cierra el diálogo. */
+  const next = () => { if (i + 1 < queue.length) setI(i + 1); else toast('Era el último comentario pendiente de la lista') }
+  /** La extensión abre el comentario en Facebook y publica la respuesta con la cuenta con la que has iniciado sesión. */
+  const canSend = !!ext && c.platform === 'facebook' && /comment_id=/.test(c.permalink || '')
+  const send = async () => {
+    setSending(true)
+    try {
+      const r = await publisherCommand('reply', { url: c.permalink, text: final(), author: c.authorName, snippet: c.text.slice(0, 80), win, close: true }, 3 * 60_000)
+      if (r.ok) {
+        const t = final()
+        markAnswered(c, 'extension', sel || undefined)
+        const added = await addReply(c, t, { author: typeof r.author === 'string' ? r.author : '', link: typeof r.link === 'string' ? r.link : '' })
+        setDone((d) => ({ ...d, [c.id]: { text: t, author: added.authorName } }))
+        toast(r.verified === false ? 'Respuesta enviada y añadida al seguimiento (no se pudo confirmar en la página)' : 'Respuesta publicada y añadida al seguimiento', 'send')
+        if (i + 1 < queue.length) setI(i + 1)
+      }
+      else toast(r.blocked ? `Facebook bloqueó la respuesta: ${r.error}` : `No se pudo responder: ${r.error || 'error desconocido'}`)
+    } catch (e) { toast(`No se pudo responder: ${(e as Error).message}`) }
+    finally { setSending(false) }
+  }
   const suggest = async () => {
     setAi({ for: c.id, items: [], loading: true })
     try { const items = await aiReplies(c); setAi({ for: c.id, items, loading: false }); if (items[0]) { setText(items[0]); setSel(null) } }
@@ -62,13 +88,20 @@ export function ReplyDialog({ queue, start, onClose }: { queue: Comment[]; start
   return (
     <Dialog open onClose={onClose} wide title={`Responder a ${c.authorName || 'comentario'}`}
       actions={<>
-        <span className="mr-auto self-center text-xs text-text-2">Pendiente {i + 1} de {queue.length}</span>
+        <span className="mr-auto self-center text-xs text-text-2">Pendiente {i + 1} de {queue.length}{Object.keys(done).length ? ` · ${Object.keys(done).length} respondido${Object.keys(done).length === 1 ? '' : 's'}` : ''}</span>
         <Button variant="text" disabled={i === 0} onClick={() => setI(i - 1)}>Anterior</Button>
-        <Button variant="text" onClick={next}>Omitir</Button>
+        <Button variant="text" disabled={i + 1 >= queue.length} onClick={next}>{done[c.id] ? 'Siguiente' : 'Omitir'}</Button>
         <Button variant="outlined" icon="done" onClick={() => { markAnswered(c, 'manual', sel || undefined); next() }}>Marcar como respondido</Button>
-        <Button icon="open_in_new" disabled={!text.trim()} onClick={async () => { await copyText(final()); if (c.permalink) window.open(c.permalink, '_blank', 'noopener'); toast('Respuesta copiada: pégala en el comentario'); markAnswered(c, 'manual', sel || undefined); next() }}>Copiar y abrir</Button>
+        <Button variant={canSend ? 'outlined' : 'filled'} icon="open_in_new" disabled={!text.trim() || sending} onClick={async () => { await copyText(final()); if (c.permalink) window.open(c.permalink, '_blank', 'noopener'); toast('Respuesta copiada: pégala en el comentario'); markAnswered(c, 'manual', sel || undefined); next() }}>Copiar y abrir</Button>
+        {canSend && <Button icon={sending ? 'progress_activity' : 'send'} disabled={!text.trim() || sending} onClick={send}>{sending ? 'Respondiendo…' : 'Responder en Facebook'}</Button>}
       </>}>
       <blockquote className="mb-4 rounded-2xl bg-surface-2 p-3"><div className="mb-1 text-xs text-text-2">{c.authorName} · {c.sentiment}{c.isQuestion ? ' · pregunta' : ''}</div><div className="whitespace-pre-wrap">{c.text}</div></blockquote>
+      {done[c.id] && (
+        <div className="-mt-2 mb-4 ml-8 rounded-2xl bg-primary-container p-3 text-on-primary-container">
+          <div className="mb-1 flex items-center gap-1 text-xs"><Icon name="check_circle" fill className="!text-[16px]" />Respondido por {done[c.id].author} · añadido al seguimiento</div>
+          <div className="whitespace-pre-wrap">{done[c.id].text}</div>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <div className="mb-2 flex items-center gap-2"><h3 className="flex-1 text-base">Respuestas</h3>
@@ -96,7 +129,10 @@ export function ReplyDialog({ queue, start, onClose }: { queue: Comment[]; start
             const t = text.split(name).join('{nombre}').split(first).join('{nombre_pila}')
             setPrefs({ replies: [...prefs.replies, { id: 'u' + Date.now().toString(36), title: t.slice(0, 40), text: t, tags: [c.isQuestion ? 'pregunta' : c.sentiment] }] }); toast('Guardada en el catálogo')
           }}>Guardar en el catálogo</Button>
-          <Banner tone="info" className="mt-3">Se copia la respuesta y se abre el comentario en la red para que la pegues y publiques con tu cuenta.</Banner>
+          <Banner tone="info" className="mt-3">{canSend
+            ? <><b>Responder en Facebook</b> publica la respuesta con la cuenta con la que has iniciado sesión en este navegador. <b>Copiar y abrir</b> te deja pegarla tú.</>
+            : c.platform === 'facebook' && !ext ? 'Instala la extensión para responder directamente desde aquí. Mientras tanto, se copia la respuesta y se abre el comentario para que la pegues.'
+            : 'Se copia la respuesta y se abre el comentario en la red para que la pegues y publiques con tu cuenta.'}</Banner>
         </div>
       </div>
     </Dialog>

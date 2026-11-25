@@ -1,5 +1,5 @@
 {
-  "version": "2.0.1",
+  "version": "2.1.1",
   "files": [
     {
       "name": "background.js",
@@ -27,7 +27,7 @@
     },
     {
       "name": "fb.js",
-      "sha256": "afa077308eaafe96e5d4abe96d8522d68a04f0e9eb8845ed4b3bfe7a9071ac38"
+      "sha256": "4a94ea69a7b01ed6164381aa2bce2c0d375eed392a359a210dba8bfc169d334c"
     },
     {
       "name": "icon.svg",
@@ -47,11 +47,11 @@
     },
     {
       "name": "manifest.json",
-      "sha256": "d98d110e4f7a17cabd8ad4e521002656107d5217f9bb406ef9cb95b6d9fef773"
+      "sha256": "8408dcf8fbe892aa3b6fc3048973613f365280ff46280023eda8fe7ab2f305c6"
     },
     {
       "name": "publisher.js",
-      "sha256": "e7a3ccf12b106a037abe86e0e476102055b0a6c9d0e6038ecaf5cd52a88a169a"
+      "sha256": "b961dc2a0b1f3d4864223b970e50f730327afa2c051abfd35c85b744bfa228ea"
     },
     {
       "name": "update.html",

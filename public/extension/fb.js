@@ -1,4 +1,4 @@
-/* Facebook Publisher · publicación en un grupo (se ejecuta en facebook.com con la sesión del usuario).
+/* Social Networks Manager · publicación en grupos y respuesta a comentarios (se ejecuta en facebook.com con la sesión del usuario).
  * Pasos: abrir «Escribe algo…», pegar el texto, adjuntar archivos, pulsar «Publicar» y comprobar el resultado.
  * Si Facebook muestra un aviso de bloqueo o restricción, se detiene y lo comunica para que la app pare. */
 (() => {
@@ -191,6 +191,94 @@
     return {ok: true, review, messages};
   }
 
+
+  /* ---- Responder a un comentario con la cuenta activa ----
+     Abre el enlace del comentario (con comment_id), lo localiza, pulsa «Responder», escribe el texto, lo envía
+     con Intro y comprueba que la respuesta aparece. Ante un aviso de bloqueo de Facebook se detiene. */
+  const RX_REPLY = /^(responder|reply)$/i;
+  const RX_REPLY_BOX = /(responder a|reply to|escribe una respuesta|write a reply|responder como|reply as|escribe un comentario|write a comment)/i;
+  const norm = t => String(t || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  function commentIdsOf(url) {
+    try { const u = new URL(url); return [u.searchParams.get('reply_comment_id'), u.searchParams.get('comment_id')].filter(Boolean); } catch { return []; }
+  }
+  function findComment(job) {
+    const ids = commentIdsOf(job.url);
+    // 1) por el identificador del comentario en sus enlaces (el más fiable)
+    for (const id of ids) {
+      const a = [...document.querySelectorAll('a[href*="comment_id"]')].find(x => { try { const u = new URL(x.href); return u.searchParams.get('reply_comment_id') === id || (!u.searchParams.get('reply_comment_id') && u.searchParams.get('comment_id') === id); } catch { return false; } });
+      const art = a && a.closest('[role=article]');
+      if (art && vis(art)) return art;
+    }
+    // 2) por autor y comienzo del texto
+    const snip = norm(job.snippet).slice(0, 50), who = norm(job.author);
+    return [...document.querySelectorAll('[role=article]')].filter(vis).find(art => {
+      const t = norm(art.innerText);
+      return snip && t.includes(snip) && (!who || t.includes(who) || norm(art.getAttribute('aria-label')).includes(who));
+    }) || null;
+  }
+  /* Botón «Responder» del propio comentario (no el de una respuesta anidada) */
+  const replyButtonOf = art => [...art.querySelectorAll('[role=button],a,span')].filter(vis).find(b => RX_REPLY.test(label(b)) && b.closest('[role=article]') === art);
+  /* Cuadro de respuesta que aparece tras pulsar «Responder»: el más cercano por debajo del comentario */
+  function replyBoxNear(art) {
+    const boxes = [...document.querySelectorAll('[contenteditable=true][role=textbox],[contenteditable=true]')].filter(vis);
+    const top = art.getBoundingClientRect().bottom;
+    const cand = boxes.filter(b => RX_REPLY_BOX.test(b.getAttribute('aria-label') || b.getAttribute('aria-placeholder') || '') || art.parentElement?.contains(b));
+    const list = (cand.length ? cand : boxes).map(b => ({ b, d: Math.abs(b.getBoundingClientRect().top - top) })).sort((x, y) => x.d - y.d);
+    return list[0] ? list[0].b : null;
+  }
+  async function reply(job) {
+    progress('Buscando el comentario…');
+    const block0 = alertText(); if (block0) return {ok: false, blocked: true, step: 'load', error: block0};
+    if (/\/login|checkpoint/.test(location.pathname)) return {ok: false, step: 'login', error: 'Facebook pide iniciar sesión.'};
+    let art = await waitFor(() => findComment(job), 20000, 500);
+    if (!art) {
+      // a veces hay que desplegar «Ver más comentarios» o el hilo
+      for (let i = 0; i < 4 && !art; i++) {
+        const more = [...document.querySelectorAll('[role=button]')].filter(vis).find(b => /(ver m[aá]s comentarios|view more comments|ver \d+ respuestas|view \d+ repl|m[aá]s respuestas|more replies)/i.test(label(b)));
+        if (!more) break;
+        click(more); await sleep(1500); art = findComment(job);
+      }
+    }
+    if (!art) return {ok: false, step: 'comment', error: 'No se encontró el comentario en la página (puede haberse borrado u ocultado).'};
+    const btn = replyButtonOf(art);
+    if (!btn) return {ok: false, step: 'button', error: 'El comentario no tiene botón «Responder» (¿comentarios cerrados?).'};
+    progress('Abriendo el cuadro de respuesta…');
+    click(btn); await sleep(900);
+    const tb = await waitFor(() => replyBoxNear(art), 10000, 300);
+    if (!tb) return {ok: false, step: 'composer', error: 'No se abrió el cuadro de respuesta.'};
+    progress('Escribiendo la respuesta…');
+    tb.focus(); await sleep(200);
+    // Facebook puede rellenar «@Nombre» al abrir la respuesta: se conserva y se añade el texto después
+    const pre = tb.innerText.trim();
+    const t = job.text;
+    document.execCommand('insertText', false, (pre && !/\s$/.test(pre) ? ' ' : '') + t); await sleep(500);
+    if (!norm(tb.innerText).includes(norm(t).slice(0, 15))) { const dt = new DataTransfer(); dt.setData('text/plain', t); pasteInto(tb, dt); await sleep(600); }
+    if (!norm(tb.innerText).includes(norm(t).slice(0, 15))) return {ok: false, step: 'text', error: 'No se pudo escribir la respuesta.'};
+    // «Responder como Nombre» / «Reply as Name»: la cuenta (o página) con la que se publica
+    const asWho = ((tb.getAttribute('aria-label') || tb.getAttribute('aria-placeholder') || '').match(/(?:responder como|reply as|comentar como|comment as)\s+(.+?)\s*$/i) || [])[1] || '';
+    if (job.test) { progress('Modo prueba: la respuesta está escrita pero no se envió.'); return {ok: true, test: true}; }
+    progress('Enviando…');
+    const ev = {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true};
+    tb.dispatchEvent(new KeyboardEvent('keydown', ev)); tb.dispatchEvent(new KeyboardEvent('keypress', ev)); tb.dispatchEvent(new KeyboardEvent('keyup', ev));
+    // enviado = el cuadro se vacía (o desaparece)
+    const sent = await waitFor(() => { const b = alertText(); if (b) return {blocked: b}; return !tb.isConnected || !norm(tb.innerText).includes(norm(t).slice(0, 15)) ? {ok: true} : null; }, 20000, 400);
+    if (sent && sent.blocked) return {ok: false, blocked: true, step: 'publish', error: sent.blocked};
+    if (!sent) return {ok: false, step: 'publish', error: 'La respuesta no se envió: revisa la ventana de Facebook.'};
+    progress('Comprobando la respuesta…');
+    const snip = norm(t).slice(0, 30);
+    const mine = await waitFor(() => [...document.querySelectorAll('[role=article]')].reverse().find(a => a !== art && norm(a.innerText).includes(snip)), 15000, 500);
+    let author = asWho, link = '';
+    if (mine) {
+      const l = mine.getAttribute('aria-label') || '';
+      const m = l.match(/^(?:respuesta|comentario|reply|comment)\s+(?:de|by)\s+(.+?)(?:\s+(?:al comentario de|a la respuesta de|a un comentario de|a una respuesta de|en respuesta a|to)\s.*|\s+hace\s.*|\s+\d+\s+\S+\s+ago)?$/i);
+      if (m) author = m[1].trim();
+      else if (!author) { const a = mine.querySelector('a[role=link] span, a span'); if (a) author = a.innerText.trim(); }
+      const h = [...mine.querySelectorAll('a[href*="comment_id"]')].map(a => a.href).find(x => /reply_comment_id=/.test(x)) || '';
+      link = h;
+    }
+    return {ok: true, verified: !!mine, author, link};
+  }
+
   /* Lectura de la miniatura de una publicación (solo lectura, para la vista previa) */
   function readMeta() {
     const m = k => (document.querySelector(`meta[property="${k}"],meta[name="${k}"]`) || {}).content || '';
@@ -208,10 +296,10 @@
   chrome.runtime.onMessage.addListener((msg, sender, send) => {
     if (sender.id !== chrome.runtime.id || !msg) return;
     if (msg.cmd === 'meta') { send(readMeta()); return; }
-    if (msg.cmd !== 'post') return;
+    if (msg.cmd !== 'post' && msg.cmd !== 'reply') return;
     if (window.__fbpBusy) { send({ok: false, step: 'ext', error: 'Publicación en curso'}); return; }
     window.__fbpBusy = true;
-    post(msg.job).then(send, e => send({ok: false, step: 'script', error: String((e && e.message) || e)})).finally(() => { window.__fbpBusy = false; });
+    (msg.cmd === 'reply' ? reply(msg.job) : post(msg.job)).then(send, e => send({ok: false, step: 'script', error: String((e && e.message) || e)})).finally(() => { window.__fbpBusy = false; });
     return true;
   });
 })();

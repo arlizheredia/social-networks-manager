@@ -240,9 +240,17 @@ async function collectPost(t: Tracking, p: Post, it: TrackItem, onProg: (u: Reco
   return { parsed: fromExtractor(r.data), partial: !!r.stopped, stopped: !!r.stopped && RUN.stopReq }
 }
 
-function notifyDesk(title: string, body: string) {
-  try { if ('Notification' in window && Notification.permission === 'granted' && document.visibilityState !== 'visible') new Notification(title, { body, tag: 'snm-tracking' }) } catch { /* */ }
+function notifyDesk(title: string, body: string, link?: string) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted' || document.visibilityState === 'visible') return
+    const n = new Notification(title, { body, tag: 'snm-tracking' })
+    // al pulsarla se vuelve a la app y, si hay enlace, se abre el seguimiento en el historial
+    n.onclick = () => { window.focus(); if (link) location.hash = link; n.close() }
+  } catch { /* */ }
 }
+
+/** Enlace a un seguimiento en Historial › Seguimientos de comentarios. */
+export const historyLink = (tid: string) => `#/historial?tab=seg&t=${encodeURIComponent(tid)}`
 
 export async function runTracking(tid: string) {
   try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission() } catch { /* */ }
@@ -341,8 +349,8 @@ export async function runTracking(tid: string) {
   if (RUN.halt) { t.status = 'paused'; t.halt = { ...RUN.halt, at: new Date().toISOString() }; toast(`Extracción detenida: «${RUN.halt.post}» falló. Revisa la conexión o la sesión y pulsa Continuar.`) }
   else if (RUN.stopReq || left) { t.status = 'paused'; toast(pr.comments ? `Seguimiento en pausa: ${countTxt(pr.comments, 'comentario guardado', 'comentarios guardados')}. Pulsa Continuar cuando quieras.` : `Seguimiento en pausa: ${pr.done} de ${pr.n} publicaciones`) }
   else if (pr.errors) { t.status = 'paused'; toast(countTxt(pr.errors, 'publicación no se pudo extraer', 'publicaciones no se pudieron extraer') + ': reinténtalas o finaliza el seguimiento') }
-  else { t.status = 'done'; t.finishedAt = new Date().toISOString(); toast(pr.comments ? `✓ Seguimiento completado: ${countTxt(pr.comments, 'comentario', 'comentarios')}. Ya está en el historial.` : '⚠ El seguimiento terminó sin comentarios: reintenta las publicaciones.') }
-  if (t.status === 'done') notifyDesk('Seguimiento completado', `${t.name}: ${countTxt(pr.comments, 'comentario', 'comentarios')}`)
+  else { t.status = 'done'; t.finishedAt = new Date().toISOString(); toast(pr.comments ? `✓ Seguimiento «${t.name}» completado: ${countTxt(pr.comments, 'comentario', 'comentarios')}.` : '⚠ El seguimiento terminó sin comentarios: reintenta las publicaciones.', undefined, { label: 'Ver en el historial', href: historyLink(t.id) }) }
+  if (t.status === 'done') notifyDesk('Seguimiento completado', `${t.name}: ${countTxt(pr.comments, 'comentario', 'comentarios')}. Pulsa para verlo en el historial.`, historyLink(t.id))
   else if (RUN.halt) notifyDesk('Extracción detenida', `${t.name}: ${RUN.halt.error}`)
   useTR.setState({ running: null })
   Object.assign(RUN, { stopReq: false, halt: null })
@@ -369,6 +377,18 @@ export async function finishTracking(t: Tracking) {
   t.postIds.forEach((id) => { if (t.items[id].status === 'pending' || t.items[id].status === 'error') t.items[id].status = 'skipped' })
   t.status = 'done'; t.finishedAt ||= new Date().toISOString()
   await putTracking(t)
+}
+
+/** Añade un comentario (p. ej. una respuesta enviada desde la app) al resultado de un seguimiento. */
+export async function appendToResult(tid: string, postId: string, raw: RawComment) {
+  const r = await DB.getResult(tid + '|' + postId)
+  if (!r) return false
+  const { keys: _k, comments, ...rest } = r // eslint-disable-line @typescript-eslint/no-unused-vars
+  const list = [...(comments || []), raw]
+  await DB.saveResult(rest, list)
+  const t = useTR.getState().tracks.find((x) => x.id === tid)
+  if (t?.items[postId]) { t.items[postId].count = list.length; t.items[postId].saved = list.length; await putTracking(t) }
+  return true
 }
 
 /** Comentarios de uno o varios seguimientos, con su contexto (publicación, fecha). */

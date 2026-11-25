@@ -3,14 +3,16 @@ import { create } from 'zustand'
 import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval'
 import { toast } from '@/components/ui'
 import { generate, parseJsonLoose, withTask } from '@/features/ai/engine'
-import { computeTeam, semanticScores } from './analysis'
-import { normName } from './db'
+import { computeTeam, fkey, focusKeywords, focusMatch, focusTextOf, semanticScores } from './analysis'
+import { useAI } from '@/features/ai/engine'
 import { finalize, prepare, rescoreSentiment, setSentOverride } from './normalize'
-import { getPrefs, setPrefs } from './prefs'
+import { getPrefs, setPrefs, usePrefs } from './prefs'
+import { appendToResult } from './tracking'
+import { normName } from './db'
 import type { Comment, Meta, Parsed, Sentiment } from './types'
 
-export type SearchMode = 'sem' | 'ai' | 'person'
-export interface Filters { type: Set<string>; sent: Set<Sentiment>; extra: Set<'q' | 'react' | 'att' | 'noreply' | 'noteam'>; post: Set<string> }
+export type SearchMode = 'sem' | 'ai'
+export interface Filters { type: Set<string>; sent: Set<Sentiment>; extra: Set<'q' | 'react' | 'att' | 'noreply' | 'noteam'>; post: Set<string>; people: Set<string> }
 interface ExploreState {
   meta: Meta | null
   comments: Comment[]
@@ -21,34 +23,66 @@ interface ExploreState {
   sem: { q: string; mode: 'sem' | 'ai'; scores: Map<string, number> } | null
   sort: 'idx' | 'old' | 'new' | 'react' | 'replies'
   teamOn: boolean
+  /** Enfoque usado para decidir qué requiere respuesta y cómo se calculó. */
+  focus: { q: string; keys: Set<string> | null; ai: boolean } | null
+  /** Comentario recién añadido (se resalta un momento en la lista). */
+  flash?: string | null
+  /** Cambia solo al cargar otro conjunto de comentarios (no al recalcular equipo, polaridad o respuestas). */
+  loadId: number
 }
-const emptyF = (): Filters => ({ type: new Set(), sent: new Set(), extra: new Set(), post: new Set() })
-export const useExplore = create<ExploreState>(() => ({ meta: null, comments: [], version: 0, f: emptyF(), q: '', mode: 'sem', sem: null, sort: 'idx', teamOn: false }))
+const emptyF = (): Filters => ({ type: new Set(), sent: new Set(), extra: new Set(), post: new Set(), people: new Set() })
+export const useExplore = create<ExploreState>(() => ({ meta: null, comments: [], version: 0, f: emptyF(), q: '', mode: 'sem', sem: null, sort: 'idx', teamOn: false, focus: null, loadId: 0 }))
 const set = useExplore.setState
 const KEY = 'snm.explore'
 
 export function loadParsed(parsed: Parsed, { silent = false } = {}) {
   const { meta, comments } = prepare(parsed)
-  const teamOn = computeTeam(comments, meta.postAuthor || '')
-  set({ meta, comments, version: Date.now(), f: emptyF(), q: '', sem: null, teamOn })
+  set({ meta, comments, version: Date.now(), loadId: Date.now(), f: emptyF(), q: '', sem: null, focus: null })
+  applyTeam()
   idbSet(KEY, { meta, comments }).catch(() => {})
   if (!silent) toast(`${comments.length.toLocaleString('es')} comentarios cargados`)
 }
 export function loadComments(meta: Meta, comments: Comment[]) {
   const list = finalize(comments.map((c) => ({ ...c })), meta)
-  const teamOn = computeTeam(list, meta.postAuthor || '')
-  set({ meta, comments: list, version: Date.now(), f: emptyF(), q: '', sem: null, teamOn })
+  set({ meta, comments: list, version: Date.now(), loadId: Date.now(), f: emptyF(), q: '', sem: null, focus: null })
+  applyTeam()
   idbSet(KEY, { meta, comments: list }).catch(() => {})
 }
 export async function restoreExplore() {
   if (useExplore.getState().comments.length) return
   try {
     const d = await idbGet<{ meta: Meta; comments: Comment[] }>(KEY)
-    if (d?.comments?.length) { const teamOn = computeTeam(d.comments, d.meta.postAuthor || ''); set({ meta: d.meta, comments: d.comments, version: Date.now(), teamOn }) }
+    if (d?.comments?.length) { set({ meta: d.meta, comments: d.comments, version: Date.now(), focus: null }); applyTeam() }
   } catch { /* */ }
 }
-export function clearExplore() { set({ meta: null, comments: [], version: Date.now(), f: emptyF(), sem: null }); idbDel(KEY).catch(() => {}) }
-export function refreshTeam() { const s = useExplore.getState(); const teamOn = computeTeam(s.comments, s.meta?.postAuthor || ''); set({ teamOn, version: Date.now() }) }
+export function clearExplore() { set({ meta: null, comments: [], version: Date.now(), loadId: Date.now(), f: emptyF(), sem: null }); idbDel(KEY).catch(() => {}) }
+/**
+ * Qué comentarios requieren respuesta: los que tratan del enfoque de los informes (Ajustes) y que nadie
+ * del equipo ha respondido. Al instante se usan las palabras clave del enfoque; con la IA instalada se afina
+ * con la búsqueda por significado (igual que los informes). Sin enfoque, cuentan todos.
+ */
+let focusRun = 0
+export function applyTeam() {
+  const s = useExplore.getState(), list = s.comments, pa = s.meta?.postAuthor || ''
+  const q = getPrefs().report.focus.trim()
+  if (!q || !list.length) { set({ teamOn: computeTeam(list, pa), focus: null, version: Date.now() }); return }
+  const cached = s.focus && s.focus.q === q && s.focus.keys ? s.focus : null
+  if (cached) { set({ teamOn: computeTeam(list, pa, (c) => cached.keys!.has(fkey(c))), version: Date.now() }); return }
+  // 1) palabras clave del enfoque (inmediato)
+  const kws = focusKeywords(q)
+  set({ teamOn: computeTeam(list, pa, (c) => kws.some((k) => focusTextOf(c).includes(k))), focus: { q, keys: null, ai: false }, version: Date.now() })
+  // 2) por significado con la IA, en segundo plano
+  if (!useAI.getState().installed) return
+  const run = ++focusRun
+  focusMatch(list, q).then((keys) => {
+    if (run !== focusRun || useExplore.getState().comments !== list) return
+    set({ teamOn: computeTeam(list, pa, (c) => keys.has(fkey(c))), focus: { q, keys, ai: true }, version: Date.now() })
+  }).catch(() => { /* se quedan las palabras clave */ })
+}
+export const refreshTeam = applyTeam
+// si cambia el enfoque en Ajustes o se instala la IA, se recalcula
+usePrefs.subscribe((p, prev) => { if (p.report.focus !== prev.report.focus || p.team !== prev.team || p.teamPostAuthor !== prev.teamPostAuthor || p.teamAllReplies !== prev.teamAllReplies) { set({ focus: null }); applyTeam() } })
+useAI.subscribe((a, prev) => { if (a.installed && !prev.installed) { set({ focus: null }); applyTeam() } })
 
 export function setSentiment(c: Comment, v: Sentiment | null) {
   setSentOverride(c, v)
@@ -68,7 +102,6 @@ export const clearFilters = () => set({ f: emptyF(), q: '', sem: null })
 /** Lista filtrada y ordenada en forma de hilos. */
 export function filtered(s: ExploreState, semLevel: number) {
   const F = s.f
-  const personQ = s.mode === 'person' ? normName(s.q) : ''
   const list = s.comments.filter((c) => {
     if (F.post.size && !F.post.has(c._ref?.postId || '')) return false
     if (F.type.size && !F.type.has(c.type)) return false
@@ -78,7 +111,7 @@ export function filtered(s: ExploreState, semLevel: number) {
     if (F.extra.has('react') && !c.reactions) return false
     if (F.extra.has('noreply') && (c.type !== 'comment' || c.repliesCount)) return false
     if (F.extra.has('noteam') && s.teamOn && !c.needsTeam) return false
-    if (personQ && !normName(c.authorName).includes(personQ)) return false
+    if (F.people.size && !F.people.has(c.authorName)) return false
     if (s.sem) { const sc = s.sem.scores.get(c.id) ?? 0; return s.sem.mode === 'ai' ? sc >= 1 : sc >= semLevel }
     return true
   })
@@ -95,7 +128,7 @@ export function filtered(s: ExploreState, semLevel: number) {
 /* ---------- Búsqueda con IA ---------- */
 export async function runSearch() {
   const s = useExplore.getState(), q = s.q.trim()
-  if (!q || s.mode === 'person') return
+  if (!q) return
   try {
     if (s.mode === 'sem') {
       const scores = await withTask('Buscando por significado', (p) => semanticScores(s.comments, q, (a, b) => p(a / b)))
@@ -135,6 +168,33 @@ export function markAnswered(c: Comment, via = 'manual', replyId?: string) {
   setPrefs({ answered: { ...p.answered, [c.id]: { at: Date.now(), via } }, ...(replyId ? { replyUse: { ...p.replyUse, [replyId]: (p.replyUse[replyId] || 0) + 1 } } : {}) })
   refreshTeam()
 }
+/**
+ * Respuesta publicada desde la app: se añade a la conversación abierta (sin cambiar filtros ni vista),
+ * se guarda en el seguimiento de origen y la cuenta que respondió pasa a contar como equipo.
+ */
+export async function addReply(parent: Comment, text: string, r: { author?: string; link?: string } = {}) {
+  const s = useExplore.getState()
+  const now = new Date().toISOString()
+  const author = (r.author || '').trim()
+  const raw = {
+    id: 'app-' + Date.now().toString(36), parentId: parent.id, isReply: true, replyTo: parent.authorName,
+    authorName: author || 'Tu cuenta', text, createdAt: now, dateText: '', platform: parent.platform,
+    permalink: r.link || parent.permalink, source: 'respuesta desde la app', badges: ['Respuesta desde la app'],
+  }
+  const [c] = finalize([{ ...raw }], s.meta || {})
+  Object.assign(c, { idx: s.comments.length + 1, depth: Math.min(parent.depth + 1, 2), replyTo: parent.authorName, _ref: parent._ref, _post: parent._post, _postUrl: parent._postUrl, _date: parent._date })
+  const comments = s.comments.map((x) => (x.id === parent.id ? { ...x, repliesCount: x.repliesCount + 1 } : x))
+  comments.push(c)
+  set({ comments, flash: c.id, version: Date.now() })
+  setTimeout(() => { if (useExplore.getState().flash === c.id) set({ flash: null }) }, 6000)
+  // la cuenta con la que se respondió es la de la marca
+  const p = getPrefs()
+  if (author && !p.team.some((m) => normName(m.name) === normName(author))) setPrefs({ team: [...p.team, { name: author }] })
+  else applyTeam()
+  idbSet(KEY, { meta: s.meta, comments: useExplore.getState().comments }).catch(() => {})
+  if (parent._ref) await appendToResult(parent._ref.tid, parent._ref.postId, raw).catch(() => false)
+  return c
+}
 export async function aiReplies(c: Comment, n = 3): Promise<string[]> {
   const examples = getPrefs().replies.slice(0, 4).map((r) => `- ${r.text}`).join('\n')
   const brand = getPrefs().report.client || useExplore.getState().meta?.postAuthor || 'la marca'
@@ -167,3 +227,15 @@ export function demoParsed(): Parsed {
     ],
   }
 }
+
+/** Personas que comentan (en la publicación elegida, si hay filtro de publicación), de más a menos comentarios. */
+export function commenters(s: ExploreState) {
+  const n = new Map<string, number>()
+  s.comments.forEach((c) => {
+    if (!c.authorName || (s.f.post.size && !s.f.post.has(c._ref?.postId || ''))) return
+    n.set(c.authorName, (n.get(c.authorName) || 0) + 1)
+  })
+  return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'es'))
+}
+/** Filtra por una o varias personas (sustituye la selección). */
+export const setPeople = (names: string[]) => { const s = useExplore.getState(); set({ f: { ...s.f, people: new Set(names) } }) }

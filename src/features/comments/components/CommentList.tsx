@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Button, Chip, Icon, IconButton, MenuItem, Popover, Select, toast } from '@/components/ui'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, Chip, Icon, IconButton, Input, MenuItem, Popover, Select, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText, fmtRelative } from '@/lib/util'
 import { useAI } from '@/features/ai/engine'
 import { NeedsAI } from '@/features/ai/AIDialog'
-import { clearFilters, filtered, refreshTeam, runSearch, setSentiment, toggleFilter, useExplore, type SearchMode } from '../explore'
+import { clearFilters, commenters, filtered, refreshTeam, runSearch, setPeople, setSentiment, toggleFilter, useExplore, type SearchMode } from '../explore'
 import { setPrefs, usePrefs } from '../prefs'
 import { SENT_LABEL, platName } from '../text'
+import { focusName } from '../analysis'
 import type { Comment, Sentiment } from '../types'
 import { ReplyDialog, TeamDialog } from './ReplyDialog'
 
@@ -15,9 +16,12 @@ const PAGE = 100
 
 function CommentCard({ c, depth, onReply, score }: { c: Comment; depth: number; onReply: (c: Comment) => void; score?: number }) {
   const [more, setMore] = useState(false)
+  const flash = useExplore((x) => x.flash === c.id)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (flash) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }) }, [flash])
   const long = c.text.length > 360 || c.text.split('\n').length > 5
   return (
-    <div className={cn('flex gap-2.5', depth > 0 && 'ml-6 sm:ml-12')}>
+    <div ref={ref} className={cn('flex gap-2.5 transition-shadow', flash && 'rounded-2xl ring-2 ring-primary ring-offset-2 ring-offset-surface', depth > 0 && 'ml-6 sm:ml-12', c.needsTeam && 'rounded-2xl border-l-4 border-warn bg-warn-container/45 py-2 pr-2 pl-2')}>
       {c.authorAvatar ? <img src={c.authorAvatar} alt="" className="size-8 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" /> : <div className="grid size-8 shrink-0 place-items-center rounded-full bg-surface-3 text-xs font-medium">{(c.authorName || '?').replace(/^@/, '').slice(0, 1).toUpperCase()}</div>}
       <div className="min-w-0 flex-1">
         <div className={cn('inline-block max-w-full rounded-2xl px-3 py-2', c.isTeam ? 'bg-primary-container text-on-primary-container' : 'bg-surface-2')}>
@@ -40,10 +44,56 @@ function CommentCard({ c, depth, onReply, score }: { c: Comment; depth: number; 
           {c.teamAnswered && !c.isTeam && <span className="text-success">✓ Respondido</span>}
           <button onClick={async () => toast((await copyText(c.text)) ? 'Texto copiado' : 'No se pudo copiar')}>Copiar</button>
           {c.permalink && <a href={c.permalink} target="_blank" rel="noopener">Ver en {platName(c.platform)}</a>}
-          {!c.isTeam && <button className={cn('inline-flex items-center gap-0.5', c.needsTeam ? 'font-medium text-primary' : '')} onClick={() => onReply(c)}><Icon name="reply" className="!text-[16px]" />Responder</button>}
+          {c.needsTeam && <span className="inline-flex items-center gap-1 font-medium text-warn" title="Trata del enfoque de tus informes y nadie del equipo lo ha respondido"><Icon name="mark_chat_unread" className="!text-[16px]" />Requiere respuesta</span>}
+          {!c.isTeam && !c.needsTeam && <button className="inline-flex items-center gap-0.5" onClick={() => onReply(c)}><Icon name="reply" className="!text-[16px]" />Responder</button>}
         </div>
       </div>
+      {/* responde con el asistente de la app (catálogo, sugerencias de la IA, copiar y abrir) */}
+      {c.needsTeam && (
+        <button type="button" onClick={() => onReply(c)} aria-label={`Responder a ${c.authorName || 'este comentario'}`} title="Responder"
+          className="grid size-10 shrink-0 place-items-center self-center rounded-full bg-warn/15 text-warn transition-colors hover:bg-warn/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-warn">
+          <Icon name="reply" className="!text-[20px]" />
+        </button>
+      )}
     </div>
+  )
+}
+
+/** Filtro por persona: selector múltiple de quienes comentan (en la publicación elegida). */
+function PeopleFilter() {
+  const s = useExplore()
+  const [q, setQ] = useState('')
+  const all = commenters(s)
+  const list = q.trim() ? all.filter(([n]) => n.toLowerCase().includes(q.trim().toLowerCase())) : all
+  const sel = s.f.people
+  const toggle = (n: string) => { const x = new Set(sel); x.has(n) ? x.delete(n) : x.add(n); setPeople([...x]) }
+  const label = !sel.size ? 'Todas las personas' : sel.size === 1 ? [...sel][0] : `${sel.size} personas`
+  return (
+    <Popover className="w-80" trigger={(o, isOpen) => (
+      <button type="button" onClick={o} aria-expanded={isOpen} className={cn('snm-select inline-flex h-8 max-w-60 items-center gap-1.5 rounded-lg border pr-10 pl-3 text-[13px] font-medium', sel.size ? 'border-transparent bg-secondary-container text-on-secondary-container' : 'border-outline-2 text-text-2')}>
+        <Icon name="group" className="!text-[18px]" /><span className="truncate">{label}</span>
+      </button>
+    )}>
+      {() => (
+        <div className="p-1">
+          <Input icon="search" className="!h-10" placeholder="Buscar persona" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+          <div className="mt-2 flex items-center justify-between px-1 text-xs text-text-2">
+            <span>{all.length.toLocaleString('es')} personas{s.f.post.size ? ' en esta publicación' : ''}</span>
+            {sel.size > 0 && <button className="font-medium text-primary" onClick={() => setPeople([])}>Quitar ({sel.size})</button>}
+          </div>
+          <div className="mt-1 max-h-72 overflow-y-auto">
+            {list.slice(0, 300).map(([n, k]) => (
+              <label key={n} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-text/8">
+                <input type="checkbox" className="size-4 shrink-0 accent-[var(--primary)]" checked={sel.has(n)} onChange={() => toggle(n)} />
+                <span className="min-w-0 flex-1 truncate text-sm">{n}</span>
+                <span className="text-xs text-text-2 tabular-nums">{k}</span>
+              </label>
+            ))}
+            {!list.length && <p className="px-2 py-3 text-sm text-text-2">Nadie coincide con la búsqueda.</p>}
+          </div>
+        </div>
+      )}
+    </Popover>
   )
 }
 
@@ -58,9 +108,11 @@ export function CommentList() {
   const [team, setTeam] = useState(false)
   const { list, tops, kids } = useMemo(() => filtered(s, semLevel), [s, semLevel])
   useEffect(() => setPage(1), [s.f, s.sem, s.sort])
+  // un filtro por persona aplicado desde el Resumen abre el panel de filtros para que se vea
+  useEffect(() => { if (s.f.people.size) setShowF(true) }, [s.f.people])
   const pending = s.comments.filter((c) => c.needsTeam)
   const posts = useMemo(() => { const m = new Map<string, string>(); s.comments.forEach((c) => { if (c._ref?.postId) m.set(c._ref.postId, c._post || c._ref.postId) }); return [...m] }, [s.comments])
-  const nF = s.f.type.size + s.f.sent.size + s.f.extra.size + s.f.post.size
+  const nF = s.f.type.size + s.f.sent.size + s.f.extra.size + s.f.post.size + (s.f.people.size ? 1 : 0)
   const rows: { c: Comment; d: number }[] = []
   const walk = (c: Comment, d: number) => { rows.push({ c, d }); (kids[c.id] || []).forEach((k) => walk(k, Math.min(d + 1, 2))) }
   tops.slice(0, page * PAGE).forEach((c) => walk(c, 0))
@@ -71,23 +123,23 @@ export function CommentList() {
     if (!l.length) { toast('No hay comentarios pendientes'); return }
     setReply(l)
   }
-  const placeholder = s.mode === 'person' ? 'Escribe el nombre de quien comenta (p. ej.: Ana López)' : s.mode === 'sem' ? 'Describe el tema y pulsa Intro (p. ej.: quejas por demoras en la entrega)' : 'Criterio para la IA y pulsa Intro (p. ej.: se refieren a la marca)'
+  const placeholder = s.mode === 'sem' ? 'Describe el tema y pulsa Intro (p. ej.: quejas por demoras en la entrega)' : 'Criterio para la IA y pulsa Intro (p. ej.: se refieren a la marca)'
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-64 flex-1">
-          <Icon name={s.mode === 'person' ? 'person_search' : 'auto_awesome'} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 !text-[20px] text-text-2" />
+          <Icon name="auto_awesome" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 !text-[20px] text-text-2" />
           <input className="h-12 w-full rounded-full border border-outline bg-surface pr-4 pl-10 focus:border-primary focus:outline-2 focus:outline-primary" placeholder={placeholder} value={s.q}
-            onChange={(e) => useExplore.setState({ q: e.target.value, ...(s.mode === 'person' ? {} : {}) })}
-            onKeyDown={(e) => { if (e.key === 'Enter' && s.mode !== 'person') { if (!aiReady) { toast('Primero instala la IA de la app'); return } runSearch() } }} />
+            onChange={(e) => useExplore.setState({ q: e.target.value })}
+            onKeyDown={(e) => { if (e.key === 'Enter') { if (!aiReady) { toast('Primero instala la IA de la app'); return } runSearch() } }} />
         </div>
         <Select className="!w-auto" value={s.mode} onChange={(e) => useExplore.setState({ mode: e.target.value as SearchMode, sem: null })} aria-label="Tipo de búsqueda">
-          <option value="sem">Por significado (IA)</option><option value="ai">Clasificar con IA</option><option value="person">Por persona</option>
+          <option value="sem">Por significado (IA)</option><option value="ai">Clasificar con IA</option>
         </Select>
         <Button variant={showF || nF ? 'tonal' : 'outlined'} icon="filter_list" onClick={() => setShowF(!showF)}>Filtros{nF ? ` (${nF})` : ''}</Button>
       </div>
-      {s.mode !== 'person' && !aiReady && <NeedsAI what="La búsqueda por significado" />}
+      {!aiReady && <NeedsAI what="La búsqueda por significado" />}
       {s.sem && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-primary-container px-4 py-2 text-on-primary-container">
           <Icon name="psychology" />
@@ -98,7 +150,8 @@ export function CommentList() {
       )}
       {showF && (
         <div className="flex flex-wrap gap-2 rounded-2xl bg-surface-2 p-3">
-          {posts.length > 1 && <Select className="!h-8 !w-auto max-w-60 text-xs" value={[...s.f.post][0] || ''} onChange={(e) => useExplore.setState({ f: { ...s.f, post: new Set(e.target.value ? [e.target.value] : []) } })}><option value="">Todas las publicaciones</option>{posts.map(([id, l]) => <option key={id} value={id}>{l}</option>)}</Select>}
+          {posts.length > 1 && <Select className="!h-8 !w-auto max-w-60 text-xs" value={[...s.f.post][0] || ''} onChange={(e) => { const post = new Set(e.target.value ? [e.target.value] : []); const inPost = new Set(s.comments.filter((c) => !post.size || post.has(c._ref?.postId || '')).map((c) => c.authorName)); useExplore.setState({ f: { ...s.f, post, people: new Set([...s.f.people].filter((p) => inPost.has(p))) } }) }}><option value="">Todas las publicaciones</option>{posts.map(([id, l]) => <option key={id} value={id}>{l}</option>)}</Select>}
+          <PeopleFilter />
           <Chip selected={s.f.type.has('comment')} onClick={() => toggleFilter('type', 'comment')}>Comentarios</Chip>
           <Chip selected={s.f.type.has('reply')} onClick={() => toggleFilter('type', 'reply')}>Respuestas</Chip>
           {(['positivo', 'neutral', 'negativo'] as Sentiment[]).map((x) => <Chip key={x} selected={s.f.sent.has(x)} onClick={() => toggleFilter('sent', x)}>{SENT_LABEL[x]}s</Chip>)}
@@ -111,7 +164,11 @@ export function CommentList() {
       )}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-outline-2 bg-surface px-4 py-2">
         <Icon name="support_agent" className="text-primary" />
-        <div className="min-w-40 flex-1 text-sm"><b className="font-medium">Asistente de respuestas</b> <span className="text-text-2">{s.teamOn ? `· ${pending.length} sin respuesta del equipo` : '· define tu equipo para saber qué falta responder'}</span></div>
+        <div className="min-w-40 flex-1 text-sm">
+          <b className="font-medium">Asistente de respuestas</b>{' '}
+          <span className="text-text-2">{s.teamOn ? `· ${pending.length} ${pending.length === 1 ? 'comentario requiere' : 'comentarios requieren'} respuesta` : '· define tu equipo para saber qué falta responder'}</span>
+          {s.teamOn && s.focus && <div className="text-xs text-text-2">Los que tratan de «{focusName(s.focus.q)}» y nadie del equipo ha respondido{s.focus.ai ? '' : ' (por palabras clave; con la IA instalada también por significado)'}. El enfoque se cambia en Ajustes › Comentarios.</div>}
+        </div>
         <Button size="sm" variant="text" icon="groups" onClick={() => setTeam(true)}>Equipo</Button>
         <Button size="sm" icon="reply_all" onClick={startReply}>Responder pendientes</Button>
       </div>
