@@ -97,6 +97,7 @@ dialog[open] { animation: dlg-in .16s ease-out; }
 .report-view h1 { font-size: 28px; line-height: 36px; color: var(--primary); margin: 0 0 4px; }
 .report-view h2 { font-size: 18px; color: var(--primary); margin: 24px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--outline-2); }
 .report-view p, .report-view li { margin: 0 0 8px; }
+.report-view p.meta { margin: 0 0 2px; }
 .report-view ul, .report-view ol { padding-left: 20px; list-style: revert; }
 .report-view table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 13px; }
 .report-view th, .report-view td { border: 1px solid var(--outline-2); padding: 6px 8px; text-align: left; }

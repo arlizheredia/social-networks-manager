@@ -2,14 +2,15 @@
 import { DB, normName, postLabel } from './db'
 import { finalize } from './normalize'
 import { getPrefs } from './prefs'
-import { useTR } from './tracking'
-import { computeStats, computeTeam, detectRivals, focusFilter, focusMatch, focusName, focusSubj, reportOpinions, sentOf, type Stats } from './analysis'
+import { trackWhen, useTR } from './tracking'
+import { computeStats, computeTeam, detectRivals, fkey, focusFilter, focusMatch, focusName, focusSubj, reportOpinions, sentOf, type Stats } from './analysis'
 import type { Comment, Platform, RawComment } from './types'
 import type { Tracking } from './db'
 
 const fmtN = (n: number) => (n ?? 0).toLocaleString('es')
 export const countTxt = (n: number, one: string, many: string) => `${fmtN(n)} ${n === 1 ? one : many}`
-const fmtDay = (iso: string) => (iso ? new Date(iso + 'T12:00:00').toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '')
+/** Momento del seguimiento (para ordenar varios del mismo día). */
+const whenTs = (t: Tracking) => Date.parse(t.finishedAt || t.startedAt || t.createdAt || '') || 0
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0)
 
 export interface Snapshot { list: Comment[]; st: Stats; s: ReturnType<typeof sentOf>; authorsN: number }
@@ -31,7 +32,8 @@ export interface ReportModel {
   pending: number
   answered: number
   posts: { id: string; label: string; url: string; platform: Platform; total: number; pos: number; neg: number; negPct: number }[]
-  evolution: { name: string; date: string; total: number; pos: number; neg: number }[]
+  /** Seguimientos de más reciente a más antiguo; `base` es el más reciente y `d…` lo que cambia la base respecto a cada uno. */
+  evolution: { name: string; date: string; total: number; pos: number; neg: number; base?: boolean; dTotal?: number; dPos?: number; dNeg?: number }[]
   topAuthors: { name: string; count: number }[]
   fans: [string, number][]
   critics: [string, number][]
@@ -49,7 +51,7 @@ export interface ReportModel {
 export async function gather(tids: string[]) {
   const { tracks, posts } = useTR.getState()
   const out = new Map<string, RawComment>(), plat: Record<string, number> = {}
-  const ts = tids.map((id) => tracks.find((t) => t.id === id)).filter((t): t is Tracking => !!t).sort((a, b) => a.date.localeCompare(b.date))
+  const ts = tids.map((id) => tracks.find((t) => t.id === id)).filter((t): t is Tracking => !!t).sort((a, b) => a.date.localeCompare(b.date) || whenTs(a) - whenTs(b))
   for (const t of ts) {
     for (const r of await DB.resultsOf(t.id)) {
       const p = posts.find((x) => x.id === r.postId)
@@ -72,9 +74,15 @@ const topBy = (arr: Comment[], n: number): [string, number][] => {
 const snap = (list: Comment[]): Snapshot => ({ list, st: computeStats(list), s: sentOf(list), authorsN: new Set(list.filter((c) => !c.isTeam).map((c) => c.authorName)).size })
 const sign = (n: number) => (n > 0 ? '+' + fmtN(n) : fmtN(n))
 
-function compareRows(c: Snapshot, p: Snapshot | null): CmpRow[] {
+/**
+ * Indicadores. Con enfoque, «Comentarios revisados» son todos los del seguimiento y se añade
+ * «Comentarios que hablan de <enfoque>» (sin contar al equipo, como en el resumen).
+ */
+function compareRows(c: Snapshot, p: Snapshot | null, f?: { name: string; all: number; allPrev: number | null }): CmpRow[] {
+  const talk = (x: Snapshot) => x.list.filter((y) => !y.isTeam).length
   const rows: Omit<CmpRow, 'D' | 'tone'>[] = [
-    { k: 'Comentarios revisados', a: c.list.length, b: p ? p.list.length : null, good: 'up' },
+    { k: 'Comentarios revisados', a: f ? f.all : c.list.length, b: p ? (f ? f.allPrev : p.list.length) : null, good: 'up' },
+    ...(f ? [{ k: `Comentarios que hablan de ${f.name}`, a: talk(c), b: p ? talk(p) : null, good: 'up' as const }] : []),
     { k: 'Personas que comentan', a: c.authorsN, b: p ? p.authorsN : null, good: 'up' },
     { k: 'Interacciones', a: c.st.reacts, b: p ? p.st.reacts : null, good: 'up' },
     { k: 'Positivos', a: c.s.pos, b: p ? p.s.pos : null, good: 'up' },
@@ -88,14 +96,36 @@ function compareRows(c: Snapshot, p: Snapshot | null): CmpRow[] {
   })
 }
 
+/** Periodo: «mié, 25 nov 2026 · 14:03 – 14:09» si todo es del mismo día; si no, fecha y hora de cada extremo. */
+function periodOf(ts: Tracking[]) {
+  const a = trackWhen(ts[0]), b = trackWhen(ts[ts.length - 1])
+  if (ts.length === 1 || a === b) return a
+  const [da, ha] = a.split(' · '), [db, hb] = b.split(' · ')
+  return da === db && ha && hb ? `${da} · ${ha} – ${hb}` : `${a} – ${b}`
+}
+
 /** Construye el informe. Con enfoque, la IA selecciona los comentarios del tema. */
 export async function buildReport(opts: { tids?: string[]; comments?: Comment[]; title?: string; focus: string; terms: string[]; author: string; client: string; onProgress?: (a: number, b: number) => void }): Promise<ReportModel> {
   let all: Comment[], tracks: Tracking[] = [], title = opts.title || 'Informe de comentarios'
+  /**
+   * Varios seguimientos: cada uno se carga por separado (sin mezclar sus comentarios). El más reciente es la base
+   * del informe (indicadores, publicaciones, personas, destacados) y se compara con cada uno de los demás.
+   */
+  let per: { t: Tracking; all: Comment[] }[] = []
   if (opts.tids?.length) {
-    const g = await gather(opts.tids)
-    if (!g.comments.length) throw new Error('Los seguimientos elegidos no tienen comentarios.')
-    all = finalize(g.comments.map((c, i) => ({ ...c, id: c.id || 'r' + i })), { platform: g.platform })
-    tracks = g.tracks
+    for (const id of opts.tids) {
+      const g = await gather([id])
+      if (!g.tracks[0]) continue
+      const l = finalize(g.comments.map((c, i) => ({ ...c, id: c.id || 'r' + i })), { platform: g.platform })
+      computeTeam(l, '')
+      per.push({ t: g.tracks[0], all: l })
+    }
+    per = per.sort((a, b) => a.t.date.localeCompare(b.t.date) || whenTs(a.t) - whenTs(b.t))
+    if (!per.some((x) => x.all.length)) throw new Error('Los seguimientos elegidos no tienen comentarios.')
+    per = per.filter((x, i) => x.all.length || i === per.length - 1)
+    tracks = per.map((x) => x.t)
+    all = per[per.length - 1].all
+    if (!all.length) throw new Error(`El seguimiento más reciente («${tracks[tracks.length - 1].name}») no tiene comentarios.`)
   } else {
     all = (opts.comments || []).map((c) => ({ ...c }))
     if (!all.length) throw new Error('No hay comentarios para el informe.')
@@ -104,30 +134,27 @@ export async function buildReport(opts: { tids?: string[]; comments?: Comment[];
   const fq = opts.focus.trim()
   let list = all, focus: ReportModel['focus'] = null, keys: Set<string> | null = null
   if (fq) {
-    keys = await focusMatch(all, fq, opts.onProgress)
+    // el enfoque se decide una sola vez sobre los comentarios de todos los seguimientos (sin repetir textos)
+    const pool = new Map<string, Comment>()
+    ;(per.length ? per.flatMap((x) => x.all) : all).forEach((c) => pool.set(fkey(c), c))
+    keys = await focusMatch([...pool.values()], fq, opts.onProgress)
     list = focusFilter(all, keys)
     if (!list.some((c) => !c.isTeam)) throw new Error(`ningún comentario habla de ${focusName(fq)}. Prueba con un enfoque más amplio.`)
     focus = { q: fq, name: focusName(fq), total: all.length }
   }
   const cur = snap(list)
-  // seguimiento anterior: solo si comparte publicaciones con el último
-  let prev: Snapshot | null = null, prevName = ''
+  let prev: Snapshot | null = null, prevName = '', prevAll: number | null = null
   const evolution: ReportModel['evolution'] = []
-  if (tracks.length > 1) {
-    for (const t of tracks) {
-      const l = list.filter((c) => c._ref?.tid === t.id)
-      const s = sentOf(l.length ? l : [])
-      evolution.push({ name: t.name, date: t.date, total: l.length, pos: s.pos, neg: s.neg })
-    }
-    const last = tracks[tracks.length - 1], before = tracks[tracks.length - 2]
-    const lastPosts = new Set(last.postIds)
-    if (before.postIds.some((id) => lastPosts.has(id))) {
-      const g2 = await gather([before.id])
-      const l2 = finalize(g2.comments.map((c, i) => ({ ...c, id: c.id || 's' + i })), { platform: g2.platform })
-      computeTeam(l2, '')
-      prev = snap(keys ? focusFilter(l2, keys) : l2)
-      prevName = `«${before.name}» (${fmtDay(before.date)})`
-    }
+  if (per.length > 1) {
+    const snaps = per.map((x) => ({ t: x.t, s: snap(keys ? focusFilter(x.all, keys) : x.all) }))
+    const base = snaps[snaps.length - 1]
+    const row = (x: (typeof snaps)[number]) => { const st = sentOf(x.s.list); return { name: x.t.name, date: trackWhen(x.t), total: x.s.list.length, pos: st.pos, neg: st.neg } }
+    const b = row(base)
+    // de más reciente a más antiguo; cada uno con lo que cambia la base respecto a él
+    snaps.slice().reverse().forEach((x) => { const r = row(x); evolution.push(x === base ? { ...r, base: true } : { ...r, dTotal: b.total - r.total, dPos: b.pos - r.pos, dNeg: b.neg - r.neg }) })
+    const before = per[per.length - 2]
+    prev = snaps[snaps.length - 2].s; prevAll = before.all.length
+    prevName = `«${before.t.name}» (${trackWhen(before.t)})`
   }
   const nonTeam = list.filter((c) => !c.isTeam)
   const byPost = new Map<string, Comment[]>()
@@ -137,9 +164,9 @@ export async function buildReport(opts: { tids?: string[]; comments?: Comment[];
   const byReact = (a: Comment, b: Comment) => (b.reactions || 0) - (a.reactions || 0) || (b.text || '').length - (a.text || '').length
   const m: ReportModel = {
     title, focus, author: opts.author, client: opts.client, terms: opts.terms, generatedAt: new Date().toISOString(),
-    period: tracks.length ? (tracks.length === 1 ? fmtDay(tracks[0].date) : `${fmtDay(tracks[0].date)} – ${fmtDay(tracks[tracks.length - 1].date)}`) : new Date().toLocaleDateString('es', { dateStyle: 'long' }),
+    period: tracks.length ? periodOf(tracks) : new Date().toLocaleDateString('es', { dateStyle: 'long' }),
     tracks: tracks.map((t) => ({ id: t.id, name: t.name, date: t.date })),
-    cur, prev, prevName, cmp: compareRows(cur, prev), teamOn,
+    cur, prev, prevName, cmp: compareRows(cur, prev, focus ? { name: focus.name, all: all.length, allPrev: prevAll } : undefined), teamOn,
     pending: nonTeam.filter((c) => c.needsTeam).length, answered: nonTeam.filter((c) => c.teamAnswered).length,
     posts, evolution,
     topAuthors: cur.st.authors.filter((a) => !list.find((c) => c.authorName === a.name)?.isTeam).slice(0, 8).map((a) => ({ name: a.name, count: a.count })),
@@ -206,7 +233,6 @@ export function whatsappMessage(m: ReportModel, tone: 'cercano' | 'formal' | 'br
   if (tone !== 'breve') {
     if (m.critics.length) { L.push('', `👎 ${formal ? 'Comentaron en contra' : 'Comentan en contra'}${crit ? ' de ' + crit : ''}: ${withN(m.critics.slice(0, 4))}.${examples.length ? ' Por ejemplo:' : ''}`); examples.forEach((x) => L.push(`• «${clip(x.text)}» — ${x.authorName}`)) }
     if (m.fans.length) L.push('', `👍 ${formal ? 'Quienes más comentaron a favor' : 'Quienes más comentan a favor'}: ${withN(m.fans.slice(0, 3))}.`)
-    if (m.pending) L.push('', '⏳ Hay comentarios negativos y preguntas sin responder.')
   }
   L.push('', formal ? 'Se adjunta el informe completo con todo el detalle.' : tone === 'breve' ? 'Se adjunta el informe completo 👇' : 'Se adjunta el informe completo con el detalle 👇')
   return L.join('\n')

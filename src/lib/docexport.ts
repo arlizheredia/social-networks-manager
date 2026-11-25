@@ -26,6 +26,7 @@ const CSS = (mono: boolean) => `
   th, td { border: 1px solid #c4c7c5; padding-top: 4pt; padding-bottom: 4pt; padding-left: 6pt; padding-right: 6pt; text-align: left; vertical-align: top; font-family: ${FONT}; font-size: 12pt; }
   th { background: ${mono ? '#fff' : '#f0f4f9'}; }
   .muted { color: #5f6368; font-size: 9.5pt; }
+  p.meta { margin-top: 0; margin-right: 0; margin-bottom: 2pt; margin-left: 0; }
   .pos { color: ${mono ? '#000' : '#146c2e'}; } .neg { color: ${mono ? '#000' : '#b3261e'}; }
   blockquote { margin-top: 4pt; margin-right: 0; margin-bottom: 8pt; margin-left: 0; padding-top: 4pt; padding-bottom: 4pt; padding-left: 10pt; padding-right: 10pt; border-left: 3px solid #c4c7c5; }
 `
