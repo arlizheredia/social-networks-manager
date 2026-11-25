@@ -132,9 +132,9 @@ async function whoAmI(id) {
 async function checkStatus(details) {
   let online = true;
   try {
-    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
-    await fetch('https://www.facebook.com/favicon.ico', {cache: 'no-store', credentials: 'omit', signal: ctl.signal});
-    clearTimeout(t);
+    /* Con conexiones lentas la prueba puede tardar: se espera hasta 20 s y se reintenta una vez antes de darla por fallida */
+    const probe = async (ms) => { const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms); try { await fetch('https://www.facebook.com/favicon.ico', {cache: 'no-store', credentials: 'omit', signal: ctl.signal}); } finally { clearTimeout(t); } };
+    try { await probe(20000); } catch { await probe(20000); }
   } catch { online = false; }
   let loggedIn = null, userId = null;
   try { const c = await chrome.cookies.get({url: 'https://www.facebook.com/', name: 'c_user'}); loggedIn = !!(c && c.value); if (loggedIn && /^\d{1,20}$/.test(c.value)) userId = c.value; } catch { loggedIn = null; }

@@ -51,9 +51,11 @@ export async function checkFb(force = false): Promise<FbAccount> {
     if (!navigator.onLine) { useFb.setState({ state: 'offline', at: Date.now() }); return useFb.getState() }
     const r = await publisherCommand('status', { details: true }, 25000)
     const next: Partial<FbAccount> = { at: Date.now() }
+    // La sesión se decide por la cookie de Facebook (como el indicador de sesiones). Que la prueba de red de la
+    // extensión tarde no significa estar sin conexión: solo lo es si el propio equipo está sin Internet.
     if (!r.ok) next.state = 'unknown'
-    else if (r.online === false) next.state = 'offline'
     else if (r.loggedIn === false) next.state = 'out'
+    else if (r.online === false && !r.loggedIn) next.state = navigator.onLine ? 'unknown' : 'offline'
     else if (r.loggedIn) {
       next.state = 'in'
       next.id = /^\d{1,20}$/.test(String(r.userId || '')) ? String(r.userId) : ''

@@ -1,5 +1,5 @@
 {
-  "version": "2.0.0",
+  "version": "2.0.1",
   "files": [
     {
       "name": "background.js",
@@ -47,11 +47,11 @@
     },
     {
       "name": "manifest.json",
-      "sha256": "b96c780830307f9f4c10918915a711a509010af68350443e1b9c2ba014b4bc7b"
+      "sha256": "d98d110e4f7a17cabd8ad4e521002656107d5217f9bb406ef9cb95b6d9fef773"
     },
     {
       "name": "publisher.js",
-      "sha256": "163d5aceddb19ec94adf3f419dfe40dd1a0f25dc475a929cd4e9f8fe040006bd"
+      "sha256": "e7a3ccf12b106a037abe86e0e476102055b0a6c9d0e6038ecaf5cd52a88a169a"
     },
     {
       "name": "update.html",
