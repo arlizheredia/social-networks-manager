@@ -6,6 +6,7 @@ import { useSettings } from '@/store/settings'
 import { NAV } from './nav'
 import { AIStatusChip } from '@/features/ai/AIStatusChip'
 import { ExtensionChip } from '@/features/extension/ExtensionChip'
+import { SessionsChip } from '@/features/comments/SessionsChip'
 import { SettingsDialog } from '@/features/settings/SettingsDialog'
 import { RunDialog } from '@/features/publisher/components/RunDialog'
 
@@ -42,6 +43,7 @@ export function Layout() {
       <header className="sticky top-0 z-30 flex h-16 items-center gap-2 bg-bg/95 px-3 backdrop-blur sm:px-4 md:pl-[26px]">
         <Brand />
         <div className="flex-1" />
+        <SessionsChip />
         <ExtensionChip />
         <AIStatusChip />
         <IconButton icon={THEME_ICON[theme]} label={THEME_LABEL[theme]} onClick={cycleTheme} />
@@ -64,7 +66,7 @@ export function Layout() {
           ))}
         </nav>
 
-        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 pt-2 pb-28 sm:px-6 md:pb-10 lg:pr-8">
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 pt-2 pb-28 sm:px-6 md:pb-4 lg:pr-8">
           <div className="mx-auto max-w-[1200px]">
             {!online && (
               <div role="alert" className="mb-4 flex items-center gap-3 rounded-2xl bg-error-container px-4 py-3 text-error">
