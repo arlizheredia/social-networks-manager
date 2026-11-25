@@ -1,0 +1,65 @@
+{
+  "version": "2.0.0",
+  "files": [
+    {
+      "name": "background.js",
+      "sha256": "dd17a329c485aa6d6b90f4ea317901240b7a187644711ef3171295663585e57a"
+    },
+    {
+      "name": "bridge-extractor.js",
+      "sha256": "140bd3be8fe61a824d92a5b786212b858666c7c6ee9b09eb8cec8abb16d54efd"
+    },
+    {
+      "name": "bridge-publisher.js",
+      "sha256": "c0fdc1cb392100aeed42ad1cb38433445537a4c319322209d072d7c313e23dc4"
+    },
+    {
+      "name": "extractor-sw.js",
+      "sha256": "cdf10cb2d60a3da32b60a4e8b419ad779acad0d8686388030f3025ccdbd4260b"
+    },
+    {
+      "name": "extractor.js",
+      "sha256": "05cc4926f7a87afad1319bfc84a886916ffb26c94ce8bdf221dda240d1679849"
+    },
+    {
+      "name": "extractor.sig",
+      "sha256": "3221b16abdc0b22589f8eeb65536adbe9276388aa5799501fcdcfbb553418a98"
+    },
+    {
+      "name": "fb.js",
+      "sha256": "afa077308eaafe96e5d4abe96d8522d68a04f0e9eb8845ed4b3bfe7a9071ac38"
+    },
+    {
+      "name": "icon.svg",
+      "sha256": "0cf5c036aefba9b4fee115c023e76e7edbb7dcb16a5ca749dc2a11b70dac10c9"
+    },
+    {
+      "name": "icon128.png",
+      "sha256": "65805a4993100a61865bee928f1f7fdad003eee06c5dadc1a077d387f3995352"
+    },
+    {
+      "name": "icon16.png",
+      "sha256": "b201b00e387e30d9ef651c025cba7714737aeb08630f99592263837370727923"
+    },
+    {
+      "name": "icon48.png",
+      "sha256": "5433d4474da61ac3be7b8429c6ba8703c0b5d393ba7dfaa0f07c3549156ce960"
+    },
+    {
+      "name": "manifest.json",
+      "sha256": "b96c780830307f9f4c10918915a711a509010af68350443e1b9c2ba014b4bc7b"
+    },
+    {
+      "name": "publisher.js",
+      "sha256": "163d5aceddb19ec94adf3f419dfe40dd1a0f25dc475a929cd4e9f8fe040006bd"
+    },
+    {
+      "name": "update.html",
+      "sha256": "a157e98319e876d03e7435ea4b9f1bda313ca25c0ef3ae85c3567b22d687872c"
+    },
+    {
+      "name": "update.js",
+      "sha256": "cb01f66fa4933c9bdb39c1e9d73f3719f2e19a3f12369676569771e769de58cf"
+    }
+  ]
+}
