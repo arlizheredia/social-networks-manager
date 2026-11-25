@@ -1,0 +1,51 @@
+/** Artículos del Centro de Ayuda (HTML sencillo). */
+export interface Article { id: string; cat: string; icon: string; title: string; body: string }
+export const HELP_CATS = ['Empezar', 'Publicar en grupos', 'Comentarios', 'Informes', 'IA y extensión', 'Tus datos']
+
+export const HELP: Article[] = [
+  { id: 'inicio', cat: 'Empezar', icon: 'rocket_launch', title: 'Primeros pasos', body: `
+    <p>Social Networks Manager reúne en una sola app la <b>publicación en grupos de Facebook</b> y el <b>análisis de comentarios</b> de Facebook, Instagram y TikTok. Todo funciona en tu navegador: no hay servidor y nunca se piden contraseñas.</p>
+    <ol><li><b>Añade tus grupos</b> en <i>Grupos</i> (a mano, importando o con el marcador).</li><li><b>Instala la IA de la app</b> con el botón «Instalar IA» de la barra superior (una sola vez).</li><li><b>Instala la extensión de Chrome</b> (opcional) para publicar y extraer comentarios automáticamente.</li></ol>` },
+  { id: 'navegacion', cat: 'Empezar', icon: 'explore', title: 'Cómo está organizada la app', body: `
+    <ul><li><b>Publicar</b>: prepara la publicación y compártela en tus grupos.</li><li><b>Grupos</b>: tu lista de grupos de Facebook.</li><li><b>Comentarios</b>: seguimiento diario de publicaciones y análisis de comentarios.</li><li><b>Informes</b>: informe de comentarios (con IA) e informe de difusión en grupos.</li><li><b>Historial</b>: todo lo publicado y todos los seguimientos.</li><li><b>Ajustes</b> (⚙): tema, IA, extensión, límites de seguridad y copia de seguridad.</li></ul>` },
+  { id: 'publicar', cat: 'Publicar en grupos', icon: 'send', title: 'Publicar en grupos paso a paso', body: `
+    <ol><li><b>Publicación de origen</b> (opcional): pega la URL de la publicación de Facebook que quieres difundir. Se limpian los parámetros de rastreo.</li><li><b>Contenido</b>: escribe el texto. Usa <code>{grupo}</code>, <code>{fecha}</code> y <code>{enlace}</code> para personalizarlo en cada grupo, y negrita/cursiva con los botones o Ctrl+B / Ctrl+I.</li><li><b>Destinos</b>: marca los grupos. Los usados en las últimas 24 h quedan bloqueados.</li><li>Pulsa <b>Iniciar publicación asistida</b>: la app copia el texto y abre cada grupo; tú pegas, publicas y confirmas con <kbd>P</kbd> (publicado), <kbd>A</kbd> (en aprobación) o <kbd>S</kbd> (omitir).</li></ol>
+    <p>«Mejorar con IA» reescribe el texto con más claridad y conserva las variables y los enlaces.</p>` },
+  { id: 'seguridad', cat: 'Publicar en grupos', icon: 'verified_user', title: 'Protección de tu cuenta de Facebook', body: `
+    <ul><li>Pausa mínima de 10 s entre grupos (recomendado 30 s o más).</li><li>Máximo de grupos por día (500 por defecto, hasta 1000).</li><li>Cada grupo, como mucho una vez cada 24 h.</li><li>Si Facebook muestra un aviso, pulsa «Facebook me mostró un aviso»: se detiene todo y se bloquea 24 h.</li></ul>
+    <p>Personaliza el texto con <code>{grupo}</code> y evita muchos enlaces o hashtags: el texto repetido se parece al spam.</p>` },
+  { id: 'automatico', cat: 'Publicar en grupos', icon: 'smart_toy', title: 'Publicación automática', body: `
+    <p>Con la extensión instalada, activa <i>Ajustes › Publicar › Publicar automáticamente</i>. La primera vez se usa el <b>modo prueba</b>: prepara la publicación en el primer grupo sin pulsar «Publicar» para que la revises. Si todo está bien, pulsa «Todo bien: publicar de verdad».</p>
+    <p>La extensión usa tu sesión de Facebook, respeta los mismos límites de seguridad y se detiene ante cualquier aviso. Las condiciones de Facebook no permiten publicar de forma automatizada: empieza con pocos grupos.</p>` },
+  { id: 'grupos', cat: 'Publicar en grupos', icon: 'groups', title: 'Gestionar y capturar grupos', body: `
+    <p>En <i>Grupos</i> puedes añadir, editar, etiquetar, activar o desactivar grupos. Para capturarlos todos de una vez, arrastra el botón <b>SNM · Capturar grupos</b> a tu barra de marcadores, abre <a href="https://www.facebook.com/groups/joins/" target="_blank" rel="noopener">Tus grupos</a> en Facebook, pulsa el marcador y luego <i>Importar → Pegar</i>.</p>
+    <p>El mismo marcador, dentro de un grupo, sirve para <b>verificar</b> que tu publicación aparece (Historial › Verificar).</p>` },
+  { id: 'seguimiento', cat: 'Comentarios', icon: 'track_changes', title: 'Seguimiento diario de publicaciones', body: `
+    <ol><li>En <i>Comentarios › Seguimiento diario</i>, añade los enlaces de las publicaciones que revisas (Facebook, Instagram o TikTok).</li><li>Selecciónalas y pulsa <b>Crear seguimiento</b>.</li><li>Pulsa <b>Iniciar</b>: la extensión abre cada publicación en una ventana de trabajo y extrae todos sus comentarios. Puedes detenerlo y continuar cuando quieras; nunca se pierde lo extraído.</li></ol>
+    <p>Necesitas tener iniciada la sesión de cada red en este navegador.</p>` },
+  { id: 'analizar', cat: 'Comentarios', icon: 'insights', title: 'Analizar una publicación puntual', body: `
+    <p>En <i>Comentarios › Analizar y responder</i> puedes usar el marcador <b>SNM · Extraer comentarios</b> en cualquier publicación, pegar el resultado o importar un JSON o CSV. Verás el resumen (sentimiento, actividad, autores, palabras) y la conversación completa.</p>
+    <p>La polaridad es orientativa (diccionario de palabras y emojis); puedes cambiarla en cada comentario y se recuerda.</p>` },
+  { id: 'busqueda', cat: 'Comentarios', icon: 'manage_search', title: 'Buscar comentarios con IA', body: `
+    <ul><li><b>Por significado</b>: describe el tema («quejas por demoras») y pulsa Intro. Encuentra comentarios aunque no usen esas palabras. Ajusta la precisión (Amplia, Media, Estricta).</li><li><b>Clasificar con IA</b>: la IA lee cada comentario y decide si cumple el criterio (más lento, hasta 600).</li><li><b>Por persona</b>: filtra por quien comenta.</li></ul>` },
+  { id: 'responder', cat: 'Comentarios', icon: 'support_agent', title: 'Asistente de respuestas', body: `
+    <p>Define tu <b>equipo</b> (las personas que responden en nombre de la marca) y la app sabrá qué comentarios siguen sin respuesta. «Responder pendientes» los recorre uno a uno: elige una respuesta del catálogo o pide <b>sugerencias a la IA</b>, y pulsa «Copiar y abrir» para pegarla en el comentario.</p>
+    <p>Variables del catálogo: <code>{nombre}</code>, <code>{nombre_pila}</code>, <code>{usuario}</code>, <code>{pagina}</code>.</p>` },
+  { id: 'informe-comentarios', cat: 'Informes', icon: 'analytics', title: 'Informe de comentarios', body: `
+    <p>Elige uno o varios seguimientos (o los comentarios abiertos) y un <b>enfoque</b> (p. ej. el nombre de tu marca). La IA selecciona los comentarios que hablan de ese tema y el informe se centra en ellos: resumen, indicadores, comparación con el seguimiento anterior, quién habla bien y quién critica, opiniones repetidas, competencia, comentarios destacados, preguntas sin responder, conclusiones y recomendaciones.</p>
+    <p>Expórtalo a Word, PDF (Imprimir › Guardar como PDF) o página web, o cópialo para pegarlo en un correo. «Mensaje para WhatsApp» prepara el texto para acompañarlo.</p>` },
+  { id: 'informe-difusion', cat: 'Informes', icon: 'summarize', title: 'Informe de difusión en grupos', body: `
+    <p>Resume lo publicado en tus grupos en una fecha: cuántos grupos, cuáles quedaron en aprobación, incidencias y próximos pasos. El texto es editable antes de copiarlo o exportarlo a Word o PDF.</p>` },
+  { id: 'ia', cat: 'IA y extensión', icon: 'auto_awesome', title: 'La IA de la app', body: `
+    <p>Una sola IA para todo: búsqueda por significado, informes, sugerencias de respuesta, mensaje para WhatsApp y mejora de textos. Es <b>gratuita, local y sin claves</b>: funciona sin conexión y nada sale de tu navegador.</p>
+    <p>Se instala una vez (≈ 620 MB) desde Internet o desde el <b>paquete de IA</b> (.zip) sin usar Internet. Desde un equipo que ya la tiene puedes <i>Exportar paquete</i> para instalarla en otro. Si ya la instalaste con Social Comments Analyzer en este navegador, se reutiliza.</p>
+    <p>Si el equipo tiene poca memoria, cierra otras pestañas: la IA se reinicia sola y repite la tarea.</p>` },
+  { id: 'extension', cat: 'IA y extensión', icon: 'extension', title: 'La extensión de Chrome', body: `
+    <p>Una sola extensión para publicar automáticamente en grupos y extraer comentarios. Instalación: descarga el .zip (Ajustes › Extensión), descomprímelo, abre <code>chrome://extensions</code>, activa el <b>Modo de desarrollador</b>, pulsa <b>Cargar descomprimida</b> y elige la carpeta. Recarga la app.</p>
+    <p>Si tenías instaladas las extensiones anteriores (Facebook Publisher y Social Comments Analyzer), desactívalas para evitar duplicados.</p>` },
+  { id: 'privacidad', cat: 'Tus datos', icon: 'shield', title: 'Privacidad y copia de seguridad', body: `
+    <p>Tus grupos, historial, seguimientos y comentarios se guardan solo en este navegador. Haz copias de seguridad en <i>Ajustes › Tus datos</i>; también puedes restaurar copias de Facebook Publisher y Social Comments Analyzer.</p>
+    <p>Si ya usabas esas apps en este mismo navegador, sus datos aparecen aquí automáticamente.</p>` },
+  { id: 'atajos', cat: 'Tus datos', icon: 'keyboard', title: 'Atajos de teclado', body: `
+    <ul><li>Editor: <kbd>Ctrl</kbd>+<kbd>B</kbd> negrita, <kbd>Ctrl</kbd>+<kbd>I</kbd> cursiva.</li><li>Publicación asistida: <kbd>Enter</kbd> copiar y abrir, <kbd>C</kbd> copiar texto, <kbd>P</kbd> publicado, <kbd>A</kbd> en aprobación, <kbd>S</kbd> omitir, <kbd>Esc</kbd> salir.</li><li>Búsqueda de comentarios: <kbd>Intro</kbd> buscar.</li></ul>` },
+]
