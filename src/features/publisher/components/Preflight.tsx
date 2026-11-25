@@ -30,7 +30,7 @@ export function Preflight({ open, onClose }: { open: boolean; onClose: () => voi
   else if (sel.length > left) add('warn', 'event_busy', `Hoy solo quedan ${left} de ${st.dayCap} publicaciones`, `Has seleccionado ${sel.length} grupos. El resto quedará pendiente y podrás reanudarlo desde el Historial.`)
   else add('ok', 'event_available', 'Dentro del límite diario', `${u.day.length + sel.length} de ${st.dayCap} grupos en 24 h.`)
   const est = Math.ceil((sel.length * (st.pause + 25)) / 60)
-  if (st.pause < 30 || sel.length > 40) add('warn', 'speed', 'Ritmo intenso', `Pausa de ${st.pause} s entre grupos y ${sel.length} grupos. Un ritmo así se parece al de las cuentas de spam y aumenta el riesgo de bloqueo. Tiempo estimado ≈ ${est} min.`)
+  if (st.pause < 15 || sel.length > 40) add('warn', 'speed', 'Ritmo intenso', `Pausa de ${st.pause} s entre grupos y ${sel.length} grupos. Un ritmo así se parece al de las cuentas de spam y aumenta el riesgo de bloqueo. Tiempo estimado ≈ ${est} min.`)
   else add('ok', 'timer', 'Ritmo', `Pausa de ${st.pause} s entre grupos. Tiempo estimado ≈ ${est} min.`)
   const recent = activeGroups(state).filter((g) => isRecent(g)).length
   if (recent) add('info', 'lock_clock', `${recent} grupo(s) excluidos`, `Ya publicaste en ellos en las últimas ${SAFE.RECENT_H} h.`)

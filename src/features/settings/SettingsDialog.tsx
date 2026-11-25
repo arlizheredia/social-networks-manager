@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Button, Chip, Dialog, Icon, Select, Switch, confirmBox, toast } from '@/components/ui'
+import { Button, Chip, Dialog, Icon, Select, Toggle, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { useSettings, type ThemeMode } from '@/store/settings'
 import { AIPanel } from '@/features/ai/AIDialog'
@@ -56,11 +56,11 @@ export function SettingsDialog({ open, onClose, initial = 'general' }: { open: b
                 {(['light', 'dark', 'system'] as ThemeMode[]).map((t) => <Chip key={t} selected={theme === t} onClick={() => setTheme(t)}>{{ light: 'Claro', dark: 'Oscuro', system: 'Sistema' }[t]}</Chip>)}
               </Row>
               <Row title="Notificaciones del sistema" sub="Aviso al terminar una publicación automática o un seguimiento con la app en segundo plano">
-                <Switch label="" checked={st.sysNotify} onChange={(v) => { updateSettings({ sysNotify: v }); if (v && 'Notification' in window) Notification.requestPermission() }} />
+                <Toggle label="Notificaciones del sistema" checked={st.sysNotify} onChange={(v) => { updateSettings({ sysNotify: v }); if (v && 'Notification' in window) Notification.requestPermission() }} />
               </Row>
-              <Row title="Sonido al terminar la pausa"><Switch label="" checked={st.sound} onChange={(v) => updateSettings({ sound: v })} /></Row>
+              <Row title="Sonido al terminar la pausa"><Toggle label="Sonido al terminar la pausa" checked={st.sound} onChange={(v) => updateSettings({ sound: v })} /></Row>
               <h3 className="mt-5 mb-1 text-base">Informes</h3>
-              <p className="mb-2 text-xs text-text-2">Se usan en todos los informes (comentarios y difusión en grupos).</p>
+              <p className="mb-2 text-xs text-text-2">Se usan en todos los informes (comentarios y difusión en grupos), que se exportan en hoja Carta con Arial a 12 pt.</p>
               <Row title="Cliente o marca"><input className="h-10 w-64 rounded-xl border border-outline bg-surface px-3" value={prefs.report.client} onChange={(e) => setPrefs({ report: { ...prefs.report, client: e.target.value } })} /></Row>
               <Row title="Elaborado por"><input className="h-10 w-64 rounded-xl border border-outline bg-surface px-3" value={prefs.report.author} onChange={(e) => setPrefs({ report: { ...prefs.report, author: e.target.value } })} /></Row>
             </>
@@ -72,7 +72,7 @@ export function SettingsDialog({ open, onClose, initial = 'general' }: { open: b
               <h3 className="mb-1 text-base">Protección de la cuenta</h3>
               <p className="mb-2 text-xs text-text-2">Límites que reducen el riesgo de bloqueos. Puedes hacerlos más estrictos, pero no desactivarlos.</p>
               <Row title="Pausa entre grupos (segundos)" sub={`Mínimo ${SAFE.MIN_PAUSE} s`}>
-                <Num value={st.pause} min={SAFE.MIN_PAUSE} max={SAFE.MAX_PAUSE} step={5} onChange={(v) => { if (v < SAFE.MIN_PAUSE) toast('La pausa mínima es de 10 segundos'); updateSettings({ pause: clamp(v, SAFE.MIN_PAUSE, SAFE.MAX_PAUSE, 30) }) }} />
+                <Num value={st.pause} min={SAFE.MIN_PAUSE} max={SAFE.MAX_PAUSE} step={5} onChange={(v) => { if (v < SAFE.MIN_PAUSE) toast('La pausa mínima es de 10 segundos'); updateSettings({ pause: clamp(v, SAFE.MIN_PAUSE, SAFE.MAX_PAUSE, 15) }) }} />
               </Row>
               <Row title="Máximo de grupos por día" sub="Cada grupo, como mucho una vez cada 24 h">
                 <Num value={st.dayCap} min={1} max={SAFE.MAX_DAY} onChange={(v) => updateSettings({ dayCap: v })} />
@@ -88,7 +88,7 @@ export function SettingsDialog({ open, onClose, initial = 'general' }: { open: b
                   <option value="side">Ventana lateral</option><option value="tab">Pestaña nueva</option><option value="share">Diálogo «Compartir» de Facebook</option>
                 </Select>
               </Row>
-              <Row title="Mostrar el enlace en el texto publicado"><Switch label="" checked={st.appendUrl} onChange={(v) => updateSettings({ appendUrl: v })} /></Row>
+              <Row title="Mostrar el enlace en el texto publicado"><Toggle label="Mostrar el enlace en el texto publicado" checked={st.appendUrl} onChange={(v) => updateSettings({ appendUrl: v })} /></Row>
               <Row title="Al terminar una publicación">
                 <Select value={st.clearAfter} onChange={(e) => updateSettings({ clearAfter: e.target.value as typeof st.clearAfter })}>
                   <option value="ask">Preguntar</option><option value="always">Vaciar el formulario</option><option value="never">Conservarlo</option>
@@ -96,16 +96,16 @@ export function SettingsDialog({ open, onClose, initial = 'general' }: { open: b
               </Row>
               <h3 className="mt-5 mb-1 text-base">Publicación automática (extensión)</h3>
               <Row title="Publicar automáticamente" sub="Usa la extensión y tu sesión de Facebook">
-                <Switch label="" checked={st.autoMode} onChange={async (v) => {
-                  if (v && !(await confirmBox('¿Activar la publicación automática?', 'Facebook no permite publicar de forma automatizada y puede haber bloqueos temporales de la cuenta. Los límites de seguridad seguirán activos. La primera vez se usará el modo prueba.', 'Activar, asumo el riesgo', true))) return
-                  updateSettings({ autoMode: v, ...(v ? { autoTest: true } : {}) })
+                <Toggle label="Publicar automáticamente" checked={st.autoMode} onChange={async (v) => {
+                  if (v && !(await confirmBox('¿Activar la publicación automática?', 'Facebook no permite publicar de forma automatizada y puede haber bloqueos temporales de la cuenta. Los límites de seguridad seguirán activos. ', 'Activar, asumo el riesgo', true))) return
+                  updateSettings({ autoMode: v })
                 }} />
               </Row>
-              <Row title="Modo prueba" sub="Prepara la publicación en el primer grupo pero no pulsa «Publicar»"><Switch label="" checked={st.autoTest} onChange={(v) => updateSettings({ autoTest: v })} /></Row>
-              <Row title="Cerrar la ventana de Facebook al terminar"><Switch label="" checked={st.autoClose} onChange={(v) => updateSettings({ autoClose: v })} /></Row>
+              <Row title="Modo prueba" sub="Prepara la publicación en el primer grupo pero no pulsa «Publicar»"><Toggle label="Modo prueba" checked={st.autoTest} onChange={(v) => updateSettings({ autoTest: v })} /></Row>
+              <Row title="Cerrar la ventana de Facebook al terminar"><Toggle label="Cerrar la ventana de Facebook al terminar" checked={st.autoClose} onChange={(v) => updateSettings({ autoClose: v })} /></Row>
               <Row title="Dónde trabaja la publicación automática">
                 <Select value={st.autoWin} onChange={(e) => updateSettings({ autoWin: e.target.value as typeof st.autoWin })}>
-                  <option value="nofocus">Ventana pequeña sin quitarte el foco</option><option value="tab">Pestaña en segundo plano</option><option value="minimized">Ventana minimizada</option><option value="focused">Ventana en primer plano</option>
+                  <option value="minimized">Ventana minimizada (predeterminada)</option><option value="nofocus">Ventana pequeña sin quitarte el foco</option><option value="tab">Pestaña en segundo plano</option><option value="focused">Ventana en primer plano</option>
                 </Select>
               </Row>
               <Row title="Reintentos automáticos" sub="Ante fallos de conexión o de carga">
@@ -126,8 +126,8 @@ export function SettingsDialog({ open, onClose, initial = 'general' }: { open: b
                   <option value="small">En segundo plano (recomendada)</option><option value="minimized">Minimizada</option><option value="normal">A la vista</option>
                 </Select>
               </Row>
-              <Row title="Ritmo prudente" sub="Pausas largas de vez en cuando para parecer una persona"><Switch label="" checked={prefs.extract.careful} onChange={(v) => setPrefs({ extract: { ...prefs.extract, careful: v } })} /></Row>
-              <Row title="Dejar abiertas las pestañas al terminar"><Switch label="" checked={prefs.extract.keep} onChange={(v) => setPrefs({ extract: { ...prefs.extract, keep: v } })} /></Row>
+              <Row title="Ritmo prudente" sub="Pausas largas de vez en cuando para parecer una persona"><Toggle label="Ritmo prudente" checked={prefs.extract.careful} onChange={(v) => setPrefs({ extract: { ...prefs.extract, careful: v } })} /></Row>
+              <Row title="Dejar abiertas las pestañas al terminar"><Toggle label="Dejar abiertas las pestañas al terminar" checked={prefs.extract.keep} onChange={(v) => setPrefs({ extract: { ...prefs.extract, keep: v } })} /></Row>
               <Row title="Tiempo máximo por publicación (min)"><Num value={prefs.extract.maxMin} min={2} max={180} onChange={(v) => setPrefs({ extract: { ...prefs.extract, maxMin: v } })} /></Row>
               <Row title="Pausa entre publicaciones (s)"><Num value={prefs.extract.gap} min={0} max={120} onChange={(v) => setPrefs({ extract: { ...prefs.extract, gap: v } })} /></Row>
               <Row title="Reintentos ante fallos"><Num value={prefs.extract.retries} min={1} max={10} onChange={(v) => setPrefs({ extract: { ...prefs.extract, retries: v } })} /></Row>

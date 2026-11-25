@@ -8,8 +8,8 @@ import type { Group, HistoryEntry, HistoryItem, PubSettings, Template } from './
 export const SAFE = { MIN_PAUSE: 10, MAX_PAUSE: 900, MAX_DAY: 1000, RECENT_H: 24, LOCK_H: 24 }
 
 export const DEF_SETTINGS: PubSettings = {
-  mode: 'side', pause: 30, dayCap: 500, appendUrl: false, sound: true, clearAfter: 'ask',
-  autoMode: false, autoTest: true, autoClose: true, autoWin: 'nofocus', retries: 10, retryEvery: 20, sysNotify: false,
+  mode: 'side', pause: 15, dayCap: 500, appendUrl: false, sound: true, clearAfter: 'ask',
+  autoMode: true, autoTest: false, autoClose: true, autoWin: 'minimized', retries: 10, retryEvery: 20, sysNotify: false,
 }
 
 export const clamp = (v: unknown, a: number, b: number, d: number) => {
@@ -26,15 +26,15 @@ export function cleanSettings(o: unknown): PubSettings {
   const s = { ...DEF_SETTINGS, ...(isObj(o) ? o : {}) } as Obj
   return {
     mode: (['side', 'tab', 'share'] as const).includes(s.mode as never) ? (s.mode as PubSettings['mode']) : 'side',
-    pause: clamp(s.pause, SAFE.MIN_PAUSE, SAFE.MAX_PAUSE, 30),
+    pause: clamp(s.pause, SAFE.MIN_PAUSE, SAFE.MAX_PAUSE, 15),
     dayCap: clamp(s.dayCap, 1, SAFE.MAX_DAY, 500),
     appendUrl: s.appendUrl === true,
     sound: s.sound !== false,
     clearAfter: (['ask', 'always', 'never'] as const).includes(s.clearAfter as never) ? (s.clearAfter as PubSettings['clearAfter']) : 'ask',
-    autoMode: s.autoMode === true,
-    autoTest: s.autoTest !== false,
+    autoMode: s.autoMode !== false,
+    autoTest: s.autoTest === true,
     autoClose: s.autoClose !== false,
-    autoWin: (['nofocus', 'tab', 'minimized', 'focused'] as const).includes(s.autoWin as never) ? (s.autoWin as PubSettings['autoWin']) : 'nofocus',
+    autoWin: (['nofocus', 'tab', 'minimized', 'focused'] as const).includes(s.autoWin as never) ? (s.autoWin as PubSettings['autoWin']) : 'minimized',
     retries: clamp(s.retries, 0, 50, 10),
     retryEvery: clamp(s.retryEvery, 5, 600, 20),
     sysNotify: s.sysNotify === true,
@@ -114,6 +114,15 @@ const initial: PublisherState = {
   lock: null, lockMsg: '', runId: null, report: { author: '', brand: '' },
 }
 
+/** Ajustes de Facebook Publisher con los nuevos valores por defecto donde se conservaban los antiguos. */
+function legacySettings(o: Obj | undefined): Obj {
+  const s = { ...(o || {}) }
+  if (!s.autoWin || s.autoWin === 'nofocus') s.autoWin = 'minimized'
+  if (s.pause == null || s.pause === 30) s.pause = 15
+  s.autoMode = true; s.autoTest = false
+  return s
+}
+
 /** Importa los datos de Facebook Publisher si existían en este navegador (mismo dominio github.io). */
 function legacy(): Partial<PublisherState> {
   const get = (k: string) => { try { const v = localStorage.getItem(k); return v == null ? undefined : JSON.parse(v) } catch { return undefined } }
@@ -122,7 +131,7 @@ function legacy(): Partial<PublisherState> {
   const d = get('fbp.draft')
   return {
     groups: cleanGroups(groups), history: cleanHistory(get('fbp.history')), templates: cleanTemplates(get('fbp.templates')),
-    settings: cleanSettings(get('fbp.settings')), draft: { url: str(d?.url, 2000), text: str(d?.text, 63206) },
+    settings: cleanSettings(legacySettings(get('fbp.settings'))), draft: { url: str(d?.url, 2000), text: str(d?.text, 63206) },
     sel: isObj(get('fbp.sel')) ? get('fbp.sel') : null, lock: okTs(get('fbp.lock')), lockMsg: str(get('fbp.lockMsg'), 400),
     report: { author: str(get('fbp.report')?.author, 80), brand: str(get('fbp.report')?.brand, 80) },
   }
@@ -131,7 +140,19 @@ function legacy(): Partial<PublisherState> {
 export const usePublisher = create<PublisherState>()(
   persist(() => ({ ...initial }), {
     name: 'snm.publisher',
-    version: 1,
+    version: 4,
+    // Nuevos valores por defecto: quien conservaba el valor por defecto anterior pasa al nuevo.
+    // v2: ventana de trabajo «minimizada». v3: publicación automática y pausa de 15 s. v4: sin modo prueba.
+    migrate: (persisted, version) => {
+      const p = persisted as Partial<PublisherState>
+      if (p?.settings) {
+        if (version < 2 && p.settings.autoWin === 'nofocus') p.settings = { ...p.settings, autoWin: 'minimized' }
+        if (version < 3) p.settings = { ...p.settings, ...(p.settings.pause === 30 ? { pause: 15 } : {}), ...(p.settings.autoMode === false ? { autoMode: true } : {}) }
+        // v4: publicación automática directa, sin modo prueba
+        if (version < 4) p.settings = { ...p.settings, autoTest: false }
+      }
+      return p as PublisherState
+    },
     partialize: (s) => s,
     merge: (persisted, current) => {
       const p = (persisted as Partial<PublisherState> | undefined) ?? legacy()

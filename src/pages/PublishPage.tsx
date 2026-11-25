@@ -98,6 +98,7 @@ export default function PublishPage() {
               onChange={(e) => setPub((s) => ({ draft: { ...s.draft, url: e.target.value } }))}
               onBlur={() => { if (r.url && r.url !== draft.url) setPub((s) => ({ draft: { ...s.draft, url: r.url! } })) }}
               trail={<>
+                {draft.url && <IconButton size="sm" icon="close" label="Vaciar URL" onClick={() => setPub((s) => ({ draft: { ...s.draft, url: '' } }))} />}
                 <IconButton size="sm" icon="content_paste" label="Pegar URL" onClick={async () => { try { const t = (await navigator.clipboard.readText()).trim(); setPub((s) => ({ draft: { ...s.draft, url: parseFbUrl(t).url || t } })) } catch { toast('Pulsa Ctrl+V para pegar la URL') } }} />
                 <IconButton size="sm" icon="open_in_new" label="Abrir en Facebook" onClick={() => (r.url ? window.open(r.url, '_blank', 'noopener') : toast('Primero introduce una URL válida'))} />
               </>}
