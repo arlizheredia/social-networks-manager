@@ -297,7 +297,7 @@ export function detectRivals(list: Comment[]) {
     const big = all.find((b) => b !== a && g.has(b.key) && new RegExp('(^|\\s)' + a.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|$)').test(b.key))
     if (big && g.has(a.key)) { a.items.forEach((c) => { if (!big.items.includes(c)) big.items.push(c) }); g.delete(a.key) }
   })
-  return [...g.values()].map((r) => ({ name: r.name.charAt(0).toUpperCase() + r.name.slice(1), n: r.items.length, neg: r.items.filter((c) => c.sentiment === 'negativo').length, sample: [...r.items].sort((a, b) => (b.reactions || 0) - (a.reactions || 0) || (b.text || '').length - (a.text || '').length)[0] }))
+  return [...g.values()].map((r) => ({ name: r.name.charAt(0).toUpperCase() + r.name.slice(1), n: r.items.length, neg: r.items.filter((c) => c.sentiment === 'negativo').length, ...(() => { const ord = [...r.items].sort((a, b) => (b.reactions || 0) - (a.reactions || 0) || (b.text || '').length - (a.text || '').length); return { sample: ord[0], samples: ord.slice(0, 3), ids: r.items.map((c) => c.id) } })() }))
     .sort((a, b) => b.n - a.n || b.neg - a.neg).slice(0, 8)
 }
 

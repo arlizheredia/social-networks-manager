@@ -40,6 +40,10 @@ export function reportHtml(m: ReportModel) {
   H.push('<h2>Indicadores</h2><table><thead><tr><th>Indicador</th><th>Actual</th>' + (m.prev ? `<th>Anterior</th><th>Cambio</th>` : '') + '</tr></thead><tbody>' +
     m.cmp.map((r) => `<tr><td>${esc(r.k)}</td><td><b>${r.a == null ? '—' : n(r.a)}</b></td>${m.prev ? `<td>${r.b == null ? '—' : n(r.b)}</td><td class="${r.tone === 'up' ? 'pos' : r.tone === 'down' ? 'neg' : ''}">${esc(r.D)}</td>` : ''}</tr>`).join('') + '</tbody></table>')
   if (m.prev) H.push(`<p class="muted">Actual: el seguimiento más reciente${m.tracks.length ? ` («${esc(m.tracks[m.tracks.length - 1].name)}»)` : ''}. Comparado con ${esc(m.prevName)}.</p>`)
+  // comparaciones con la competencia: punto crítico, justo después de los indicadores
+  if (m.rivals.length) H.push('<h2>Comparaciones con la competencia</h2>' + m.rivals.map((r) =>
+    `<h3>${esc(r.name)} — ${n(r.n)} ${r.n === 1 ? 'comentario' : 'comentarios'}</h3>` + r.samples.slice(0, 2).map((c) => quote(c)).join('')).join('') +
+    '<p class="muted">Detectado por nombres propios y comparaciones al hablar de compras; revísalo antes de actuar.</p>')
   if (m.evolution.length > 1) {
     // la base es el seguimiento más reciente; en los demás, entre paréntesis, cuánto cambia la base respecto a ellos
     const d = (x: number | undefined, good: 'up' | 'down') => x == null ? '' : x === 0 ? ' <span class="muted">(=)</span>' : ` <span class="${(x > 0) === (good === 'up') ? 'pos' : 'neg'}">(${x > 0 ? '▲ +' : '▼ '}${n(x)})</span>`
@@ -56,7 +60,6 @@ export function reportHtml(m: ReportModel) {
   }
   if (m.fans.length) H.push('<h2>Quiénes hablan bien</h2><p>' + m.fans.map(([a, k]) => `${esc(a)} (${k})`).join(', ') + '</p>')
   if (m.critics.length) H.push('<h2>Quiénes más critican</h2><p>' + m.critics.map(([a, k]) => `${esc(a)} (${k})`).join(', ') + '</p>')
-  if (m.rivals.length) H.push('<h2>Posibles referencias a la competencia</h2><ul>' + m.rivals.map((r) => `<li><b>${esc(r.name)}</b> — ${n(r.n)} comentario(s)${r.neg ? `, ${r.neg} negativo(s)` : ''}</li>`).join('') + '</ul><p class="muted">Orientativo: detectado por nombres propios y comparaciones al hablar de compras.</p>')
   if (m.highlightsPos.length) H.push('<h2>Comentarios positivos destacados</h2>' + byPost(m.highlightsPos))
   if (m.highlightsNeg.length) H.push('<h2>Comentarios negativos destacados</h2>' + byPost(m.highlightsNeg))
   if (m.questions.length) H.push('<h2>Preguntas sin responder</h2>' + m.questions.map((c) => quote(c)).join(''))

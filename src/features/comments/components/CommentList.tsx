@@ -39,6 +39,7 @@ function CommentCard({ c, depth, onReply, score }: { c: Comment; depth: number; 
               {c.sentimentManual && <MenuItem icon="undo" onClick={() => { setSentiment(c, null); close() }}>Automática</MenuItem>}
             </>}
           </Popover>
+          {c.brandStance && c.sentimentFrom && <span className="inline-flex items-center gap-0.5 font-medium text-error" title="Comparación con la competencia o recomendación en contra: es un punto crítico"><Icon name="warning" className="!text-[14px]" />{c.sentimentFrom.charAt(0).toUpperCase() + c.sentimentFrom.slice(1)}</span>}
           {c._post && <span className="max-w-48 truncate">· {c._post}</span>}
           {score != null && <span className="text-primary">relevancia {Math.round(score * 100)}</span>}
           {c.teamAnswered && !c.isTeam && <span className="text-success">✓ Respondido</span>}

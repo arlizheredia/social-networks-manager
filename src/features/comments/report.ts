@@ -200,13 +200,13 @@ function writeTexts(m: ReportModel) {
       : `La conversación${ab} está equilibrada entre comentarios positivos y negativos.`)
   if (m.critics.length) C.push(`Quienes más critican son ${m.critics.slice(0, 3).map(([a, n]) => `${a} (${n})`).join(', ')}.`)
   if (m.fans.length) C.push(`Quienes más hablan a favor son ${m.fans.slice(0, 3).map(([a, n]) => `${a} (${n})`).join(', ')}.`)
-  if (m.rivals.length) C.push(`Se mencionan posibles competidores: ${m.rivals.slice(0, 3).map((r) => r.name).join(', ')}.`)
+  if (m.rivals.length) { const nR = m.rivals.reduce((a, r) => a + r.n, 0); C.push(`Hay ${countTxt(nR, 'comentario que compara', 'comentarios que comparan')} con la competencia (${m.rivals.slice(0, 3).map((r) => r.name).join(', ')}): es un punto crítico a atender.`) }
   if (m.prev) { const r = m.cmp.find((x) => x.k === 'Negativos'); if (r && r.tone) C.push(r.tone === 'up' ? 'Los comentarios negativos bajaron respecto al seguimiento anterior.' : 'Los comentarios negativos aumentaron respecto al seguimiento anterior.') }
   m.conclusions = C
 
   const R: string[] = []
   if (m.fans.length) R.push('Agradecer y reconocer a quienes más comentan a favor: son posibles embajadores de la marca.')
-  if (m.rivals.length) R.push('Vigilar las menciones a la competencia para detectar comparaciones de precio o servicio.')
+  if (m.rivals.length) R.push('Analizar las comparaciones con la competencia (precio, rapidez, calidad, atención) y responder a quienes las hacen.')
   if (!R.length) R.push('Mantener el seguimiento periódico de los comentarios.')
   m.recommendations = R
 }
@@ -220,8 +220,10 @@ export function whatsappMessage(m: ReportModel, tone: 'cercano' | 'formal' | 'br
   const pos = others.filter((x) => x.sentiment === 'positivo'), neg = others.filter((x) => x.sentiment === 'negativo')
   const withN = (arr: [string, number][]) => people(arr.map(([a, n]) => `${a} (${n})`))
   const clip = (s: string) => { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > 140 ? s.slice(0, 137).replace(/\s+\S*$/, '') + '…' : s }
+  // las comparaciones con la competencia van en su propio apartado (no se repiten como ejemplo de crítica)
+  const rivalIds = new Set(m.rivals.flatMap((r) => r.ids))
   const seenA = new Set<string>()
-  const examples = [...neg].sort((a, b) => (b.reactions || 0) - (a.reactions || 0) || (b.text || '').length - (a.text || '').length).filter((x) => x.text && !seenA.has(x.authorName) && !!seenA.add(x.authorName)).slice(0, 3)
+  const examples = [...neg].filter((x) => !rivalIds.has(x.id)).sort((a, b) => (b.reactions || 0) - (a.reactions || 0) || (b.text || '').length - (a.text || '').length).filter((x) => x.text && !seenA.has(x.authorName) && !!seenA.add(x.authorName)).slice(0, 3)
   const diff = m.prev ? c.list.length - m.prev.list.length : null
   const vsPrev = diff == null ? '' : diff > 0 ? ` (${diff} más que en el seguimiento anterior)` : diff < 0 ? ` (${-diff} menos que en el seguimiento anterior)` : ' (los mismos que en el seguimiento anterior)'
   const formal = tone === 'formal', L: string[] = []
@@ -230,6 +232,11 @@ export function whatsappMessage(m: ReportModel, tone: 'cercano' | 'formal' | 'br
   if (m.focus) L.push(`Se revisaron *${countTxt(m.focus.total, 'comentario', 'comentarios')}*.`)
   else L.push(`Se analizaron *${countTxt(c.list.length, 'comentario', 'comentarios')}* de ${countTxt(c.authorsN, 'persona', 'personas')}${vsPrev}.`)
   if (others.length) L.push(`${crit ? `Sobre *${crit}* hay ${others.length === 1 ? '1 comentario' : `${others.length} comentarios`}${m.focus ? vsPrev : ''}` : 'De ellos'}: *${pos.length} ${pos.length === 1 ? 'positivo' : 'positivos'}* 👍 y *${neg.length} ${neg.length === 1 ? 'negativo' : 'negativos'}* 👎${others.length - pos.length - neg.length ? ' (el resto, neutrales)' : ''}.`)
+  if (m.rivals.length) {
+    const rv = m.rivals.slice(0, 3)
+    L.push('', `⚠️ *${formal ? 'Se registraron comparaciones con la competencia' : 'Comparan con la competencia'}*: ${people(rv.map((r) => `${r.name} (${r.n})`))}.${tone !== 'breve' ? ' Por ejemplo:' : ''}`)
+    if (tone !== 'breve') { const seenR = new Set<string>(); rv.flatMap((r) => r.samples).filter((x) => x.text && !seenR.has(x.id) && !!seenR.add(x.id)).slice(0, 2).forEach((x) => L.push(`• «${clip(x.text)}» — ${x.authorName}`)) }
+  }
   if (tone !== 'breve') {
     if (m.critics.length) { L.push('', `👎 ${formal ? 'Comentaron en contra' : 'Comentan en contra'}${crit ? ' de ' + crit : ''}: ${withN(m.critics.slice(0, 4))}.${examples.length ? ' Por ejemplo:' : ''}`); examples.forEach((x) => L.push(`• «${clip(x.text)}» — ${x.authorName}`)) }
     if (m.fans.length) L.push('', `👍 ${formal ? 'Quienes más comentaron a favor' : 'Quienes más comentan a favor'}: ${withN(m.fans.slice(0, 3))}.`)

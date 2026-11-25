@@ -32,7 +32,9 @@ export function brandIn(t: string, keys: string[]) {
 /* ---------- Postura frente a la marca ---------- */
 const AVOID_RE = /(^|[^\p{L}])(no (compres|compren|compro|comprare|compraria|pidas|pidan|recomiendo|lo recomiendo|la recomiendo|los recomiendo|vuelvo a (comprar|pedir))|nunca mas (compro|pido|vuelvo)|no vuelvo mas|ni se les ocurra|no se los recomiendo|eviten comprar|me cambie a|me pase a|mejor (compren|compra|pidan|pide) en)(?=$|[^\p{L}])/u
 const PREFER_RE = /(^|[^\p{L}])(prefiero|preferible|me quedo con|es preferible)(?=$|[^\p{L}])/u
-const PRAISE_OTHER_RE = /(^|[^\p{L}])(es lo mejor|lo mejor|mejor calidad|mejores precios|mucho mejor|es mejor|son mejores|mas barat[oa]s?|mas competitiv[oa]s?|bajando (todos )?(sus |los )?precios|mas rapid[oa]s?|mas economic[oa]s?|muy superior)(?=$|[^\p{L}])/u
+const PRAISE_OTHER_RE = /(^|[^\p{L}])(menos de \d+ horas|en (menos de )?\d+ horas|productos de calidad|es lo mejor|lo mejor|mejor calidad|mejores precios|mucho mejor|es mejor|son mejores|mas barat[oa]s?|mas competitiv[oa]s?|bajando (todos )?(sus |los )?precios|mas rapid[oa]s?|mas economic[oa]s?|muy superior)(?=$|[^\p{L}])/u
+/** Cuenta que compra o recibe en otro sitio: «me envían todo con…», «yo compro en…», «siempre pido a…». */
+const USE_OTHER_RE = /(^|[^\p{L}])(me (envian|traen|mandan|entregan|llevan|resuelven)|(yo |siempre |ahora )?(compro|pido|encargo) (en|con|a|por)|les? compro|me (llega|llegan) (todo )?(con|por|de)|yo uso|uso (la|el) (app|aplicacion|pagina|tienda))(?=$|[^\p{L}])/u
 export const COMMERCE_RE = /(^|[^\p{L}])(precios?|barat[oa]s?|car[oa]s?|calidad|entregas?|entregar|envios?|enviar|pedidos?|compras?|comprar|tiendas?|bodegas?|servicio|ofertas?|combos?|horas|domicilio|competitiv[oa]s?|economic[oa]s?|productos?|mercado)(?=$|[^\p{L}])/u
 export const ENTITY_STOP = new Set('la el los las lo es pues hola mira yo tu mi su ademas pero y o que si no ya me te le hoy ahi aqui eso esto este esta muy mas bueno gracias buenas buenos dias senor senora'.split(' '))
 
@@ -48,12 +50,12 @@ function brandStance(list: Comment[]) {
     let why = ''
     if (AVOID_RE.test(t)) why = 'recomienda no comprar'
     else if (PREFER_RE.test(t) && !brand && COMMERCE_RE.test(t)) why = 'prefiere otra opción'
-    else if (PRAISE_OTHER_RE.test(t) && !brand && COMMERCE_RE.test(t)) {
+    else if ((PRAISE_OTHER_RE.test(t) || USE_OTHER_RE.test(t)) && !brand && COMMERCE_RE.test(t)) {
       let raw = c.text
-      ;[c.replyTo, ...(c.mentions || []), c.authorName].filter(Boolean).forEach((n) => { raw = raw.split(n!).join(' ') })
+      ;[c.replyTo, ...(c.mentions || []), c.authorName].filter(Boolean).forEach((n) => { raw = raw.split(n!).join(' · ') })
       const ents = (raw.match(/[A-ZÁÉÍÓÚÑ][\p{L}\d]+(?:\s+(?:del|de|la|el|los|las|y)?\s*[A-ZÁÉÍÓÚÑ][\p{L}\d]+)*/gu) || [])
-        .map((e) => e.trim()).filter((e) => { const w = normL(e).split(' '); return !(w.length === 1 && (ENTITY_STOP.has(w[0]) || e === e.toUpperCase())) })
-      if (ents.length) why = 'elogia a otra marca (' + ents[0] + ')'
+        .map((e) => e.trim().replace(/^(Pues|Mira|Yo|Hola|Bueno|Ahora|Siempre)\s+/, '')).filter((e) => { const w = normL(e).split(' '); return !(w.length === 1 && (ENTITY_STOP.has(w[0]) || e === e.toUpperCase())) && !brandIn(normL(e), keys) })
+      if (ents.length) why = (PRAISE_OTHER_RE.test(t) ? 'elogia a otra marca (' : 'compra en la competencia (') + ents[0] + ')'
     }
     if (!why) return
     c.sentimentOwn = c.sentimentScore
