@@ -4,13 +4,14 @@
  * ritmo prudente y fusión con lo ya guardado (nunca se pierden comentarios).
  */
 import { create } from 'zustand'
+import { download } from '@/lib/util'
 import { toast } from '@/components/ui'
 import { wsleep } from '@/lib/timers'
 import { extractorSend, onExtractorMessage, useExtension } from '@/features/extension/bridge'
 import { DB, postLabel, resKey, todayISO, uid, type Post, type TrackItem, type Tracking } from './db'
-import { fromExtractor } from './normalize'
+import { fromExtractor, parseCSV } from './normalize'
 import { getPrefs } from './prefs'
-import { canonUrl, detectPlatform, platName } from './text'
+import { canonUrl, detectPlatform, normL, platName } from './text'
 import type { Parsed, Platform, RawComment } from './types'
 
 export interface Sessions { facebook: boolean; instagram: boolean; tiktok: boolean; known: boolean }
@@ -60,6 +61,80 @@ export async function addPosts(urls: string[], name = '') {
   toast(parts.join(' · ') || 'No había enlaces')
   return added
 }
+/* ---------- Importar / exportar publicaciones ---------- */
+export interface PostIn { url: string; name?: string; title?: string; author?: string; notes?: string }
+const URL_RE = /https?:\/\/[^\s"'<>,;]+/i
+const clean = (v: unknown, n = 120) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n)
+
+/** Lee publicaciones de un archivo: JSON (de esta app o una lista), CSV/Excel con columna de enlace, o texto con un enlace por línea. */
+export function parsePostsFile(text: string, fileName = ''): PostIn[] {
+  text = text.replace(/^\uFEFF/, '')
+  const t = text.trim()
+  if (/\.json$/i.test(fileName) || /^[[{]/.test(t)) {
+    try {
+      const d = JSON.parse(t)
+      const arr: unknown[] = Array.isArray(d) ? d : Array.isArray(d?.posts) ? d.posts : Array.isArray(d?.data?.posts) ? d.data.posts : []
+      return arr.map((x) => (typeof x === 'string' ? { url: x } : x && typeof x === 'object' ? (() => { const o = x as Record<string, unknown>; return { url: String(o.url || o.link || o.enlace || ''), name: clean(o.name || o.nombre), title: clean(o.title || o.titulo, 140), author: clean(o.author || o.autor), notes: clean(o.notes || o.notas, 500) } })() : { url: '' })).filter((x) => x.url)
+    } catch { /* no es JSON: se lee como texto */ }
+  }
+  const first = t.split('\n')[0] || ''
+  if (!URL_RE.test(first) && /[,;\t]/.test(first)) {
+    const rows = parseCSV(text)
+    const key = (r: Record<string, string>, re: RegExp) => Object.keys(r).find((k) => re.test(normL(k)))
+    if (rows.length) {
+      const r0 = rows[0], ku = key(r0, /^(url|enlace|link|direccion|publicacion)/)
+      if (ku) {
+        const kn = key(r0, /^(nombre|name)/), kt = key(r0, /^(titulo|title)/), ka = key(r0, /^(autor|author|pagina)/), ko = key(r0, /^(notas?|notes?)/)
+        return rows.map((r) => ({ url: (String(r[ku] || '').match(URL_RE) || [''])[0], name: kn ? clean(r[kn]) : '', title: kt ? clean(r[kt], 140) : '', author: ka ? clean(r[ka]) : '', notes: ko ? clean(r[ko], 500) : '' })).filter((x) => x.url)
+      }
+    }
+  }
+  // texto: un enlace por línea; lo demás de la línea es el nombre
+  return t.split(/\r?\n/).map((l): PostIn | null => { const m = l.match(URL_RE); return m ? { url: m[0], name: clean(l.replace(m[0], ' ').replace(/^[\s\-–—:|,;\t]+|[\s\-–—:|,;\t]+$/g, '')) } : null }).filter((x): x is PostIn => !!x)
+}
+
+/** Añade las publicaciones importadas: no duplica y completa el nombre o las notas de las que ya estaban sin ellos. */
+export async function importPosts(items: PostIn[]) {
+  let added = 0, updated = 0, dup = 0, bad = 0
+  const posts = [...useTR.getState().posts]
+  for (const it of items) {
+    const plat = detectPlatform(it.url || '')
+    if (!plat) { bad++; continue }
+    const url = canonUrl(it.url.trim())
+    const ex = posts.find((p) => p.url === url)
+    if (ex) {
+      const ch: Partial<Post> = {}
+      if (!ex.name && it.name) ch.name = it.name
+      if (!ex.notes && it.notes) ch.notes = it.notes
+      if (!ex.title && it.title) ch.title = it.title
+      if (!ex.author && it.author) ch.author = it.author
+      if (Object.keys(ch).length) { const np = { ...ex, ...ch }; await DB.put('posts', np); posts[posts.indexOf(ex)] = np; updated++ } else dup++
+      continue
+    }
+    const p: Post = { id: uid('p_'), url, platform: plat, name: it.name || '', title: it.title || '', author: it.author || '', addedAt: new Date().toISOString(), method: 'auto', notes: it.notes || '' }
+    await DB.put('posts', p)
+    posts.unshift(p)
+    added++
+  }
+  useTR.setState({ posts })
+  const parts = [added && countTxt(added, 'publicación importada', 'publicaciones importadas'), updated && countTxt(updated, 'actualizada', 'actualizadas'), dup && countTxt(dup, 'ya estaba', 'ya estaban'), bad && countTxt(bad, 'enlace no reconocido', 'enlaces no reconocidos')].filter(Boolean)
+  toast(parts.join(' · ') || 'El archivo no tiene enlaces de publicaciones')
+  return { added, updated, dup, bad }
+}
+
+export function exportPosts(list: Post[], kind: 'json' | 'csv') {
+  const day = todayISO()
+  if (kind === 'json') {
+    const data = { app: 'social-networks-manager', type: 'posts', version: 1, exportedAt: new Date().toISOString(), posts: list.map((p) => ({ name: p.name, url: p.url, platform: p.platform, title: p.title, author: p.author, notes: p.notes })) }
+    download(`publicaciones-${day}.json`, JSON.stringify(data, null, 2), 'application/json')
+  } else {
+    const q = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const rows = [['Nombre', 'Enlace', 'Red', 'Título', 'Autor', 'Notas'], ...list.map((p) => [p.name || postLabel(p), p.url, platName(p.platform), p.title, p.author, p.notes])]
+    download(`publicaciones-${day}.csv`, '\uFEFF' + rows.map((r) => r.map(q).join(';')).join('\r\n'), 'text/csv')
+  }
+  toast(countTxt(list.length, 'publicación exportada', 'publicaciones exportadas'))
+}
+
 export async function updatePost(p: Post) { await DB.put('posts', p); useTR.setState((s) => ({ posts: s.posts.map((x) => (x.id === p.id ? p : x)) })) }
 export async function deletePosts(ids: string[]) {
   for (const id of ids) await DB.del('posts', id)

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Banner, Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, NumberField, Select, Textarea, confirmBox, toast } from '@/components/ui'
+import { Banner, Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, NumberField, Popover, Select, Textarea, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText } from '@/lib/util'
 import { useExtension } from '@/features/extension/bridge'
@@ -9,7 +9,7 @@ import { postLabel, todayISO, type Post, type Tracking as T } from '../db'
 import { setPrefs, usePrefs } from '../prefs'
 import { platName } from '../text'
 import {
-  addPosts, countTxt, deletePosts, deleteTracking, finishTracking, LOGIN_URL, missingAuth, refreshSessions, retryItem, retryNow, runTracking,
+  addPosts, countTxt, exportPosts, importPosts, parsePostsFile, deletePosts, deleteTracking, finishTracking, LOGIN_URL, missingAuth, refreshSessions, retryItem, retryNow, runTracking,
   saveTracking, skipItem, stopTracking, trackProgress, trackWhen, updatePost, useTR,
 } from '../tracking'
 import { openTrackingComments } from './open'
@@ -82,6 +82,9 @@ function PostsCard({ onTrack }: { onTrack: (ids: string[]) => void }) {
   const [sel, setSel] = useState<Set<string>>(new Set())
   const list = posts.filter((p) => !q || (postLabel(p) + ' ' + p.url).toLowerCase().includes(q.toLowerCase()))
   const ids = [...sel].filter((id) => posts.some((p) => p.id === id))
+  const fileRef = useRef<HTMLInputElement>(null)
+  /** Se exportan las seleccionadas; sin selección, todas. */
+  const toExport = ids.length ? posts.filter((p) => sel.has(p.id)) : posts
   return (
     <Card>
       <CardHead step={1} title="Publicaciones" sub="Las publicaciones de Facebook, Instagram o TikTok que revisas cada día" />
@@ -91,6 +94,18 @@ function PostsCard({ onTrack }: { onTrack: (ids: string[]) => void }) {
           <div className="min-w-40 flex-1"><Input placeholder="Nombre (recomendado)" maxLength={120} value={name} onChange={(e) => setName(e.target.value)} /></div>
           <Button icon="add" disabled={!url.trim()} onClick={async () => { if (await addPosts([url], name)) { setUrl(''); setName('') } }}>Añadir</Button>
           <Button variant="text" onClick={() => setMany('')}>Añadir varias</Button>
+          <Popover trigger={(o) => <IconButton icon="import_export" label="Importar / exportar publicaciones" className="self-center" onClick={o} />}>
+            {(close) => <>
+              <MenuItem icon="upload_file" onClick={() => { close(); fileRef.current?.click() }}>Importar desde archivo (JSON, CSV, TXT)</MenuItem>
+              <MenuItem icon="data_object" disabled={!posts.length} onClick={() => { close(); exportPosts(toExport, 'json') }}>Exportar {ids.length ? `${ids.length} seleccionada${ids.length === 1 ? '' : 's'}` : 'todas'} (JSON)</MenuItem>
+              <MenuItem icon="table_view" disabled={!posts.length} onClick={() => { close(); exportPosts(toExport, 'csv') }}>Exportar {ids.length ? `${ids.length} seleccionada${ids.length === 1 ? '' : 's'}` : 'todas'} a Excel (CSV)</MenuItem>
+            </>}
+          </Popover>
+          <input ref={fileRef} type="file" hidden accept=".json,.csv,.tsv,.txt,application/json,text/csv,text/plain" onChange={async (e) => {
+            const f = e.target.files?.[0]; e.target.value = ''
+            if (!f) return
+            try { await importPosts(parsePostsFile(await f.text(), f.name)) } catch (err) { toast('No se pudo leer el archivo: ' + (err as Error).message) }
+          }} />
         </div>
       ) : (
         <div>
