@@ -36,13 +36,13 @@ function WhatsAppDialog({ m, open, onClose }: { m: ReportModel; open: boolean; o
     } catch (e) { toast('IA: ' + (e as Error).message) } finally { setBusy(false) }
   }
   return (
-    <Dialog open={open} onClose={onClose} title="Mensaje para WhatsApp" icon={<Icon name="chat" className="text-success" />}
+    <Dialog open={open} onClose={onClose} title="Mensaje para WhatsApp" className="!w-[min(720px,calc(100vw-32px))]" icon={<Icon name="chat" className="text-success" />}
       actions={<><Button variant="text" icon="auto_awesome" disabled={!aiReady || busy} onClick={ai}>{busy ? 'Redactando…' : 'Redactar con IA'}</Button><Button variant="outlined" icon="open_in_new" onClick={() => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener')}>Abrir en WhatsApp</Button><Button icon="content_copy" onClick={async () => toast((await copyText(text)) ? 'Mensaje copiado: pégalo en WhatsApp junto al informe' : 'No se pudo copiar')}>Copiar mensaje</Button></>}>
       <div className="mb-3 flex flex-wrap gap-3">
         <Field label="Tono" className="!mb-0"><Select value={prefs.waTone} onChange={(e) => setPrefs({ waTone: e.target.value as typeof prefs.waTone })}><option value="cercano">Cercano</option><option value="formal">Formal</option><option value="breve">Muy breve</option></Select></Field>
         <Field label="Firma" className="!mb-0 flex-1"><Input className="!h-10" value={prefs.waSign} placeholder={m.author} onChange={(e) => setPrefs({ waSign: e.target.value })} /></Field>
       </div>
-      <Textarea rows={12} value={text} onChange={(e) => setText(e.target.value)} />
+      <Textarea rows={12} className="h-[min(38dvh,340px)]" value={text} onChange={(e) => setText(e.target.value)} />
       <div className="mt-1 text-xs text-text-2">{[...text].length} caracteres</div>
     </Dialog>
   )
