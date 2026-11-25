@@ -36,19 +36,52 @@ export function computeStats(list: Comment[]) {
 export type Stats = ReturnType<typeof computeStats>
 export const sentOf = (list: Comment[]) => { const s = { total: list.length, pos: 0, neg: 0, neu: 0 }; list.forEach((c) => (c.sentiment === 'positivo' ? s.pos++ : c.sentiment === 'negativo' ? s.neg++ : s.neu++)); return s }
 
-/** Actividad por día (o por hora si todo ocurre en menos de 2 días). */
-export function activity(list: Comment[]) {
-  const ts = list.map((c) => c.createdTs).filter((t) => !isNaN(t))
-  if (!ts.length) return { buckets: [] as { label: string; n: number }[], per: 'día', approx: false, byHour: [] as number[] }
-  const mn = Math.min(...ts), mx = Math.max(...ts)
-  const hourly = mx - mn < 2 * 864e5
-  const map = new Map<string, number>()
-  const key = (t: number) => { const d = new Date(t); return hourly ? `${d.getDate()}/${d.getMonth() + 1} ${String(d.getHours()).padStart(2, '0')}h` : d.toLocaleDateString('es', { day: 'numeric', month: 'short' }) }
-  for (let t = hourly ? Math.floor(mn / 36e5) * 36e5 : new Date(new Date(mn).toDateString()).getTime(); t <= mx; t += hourly ? 36e5 : 864e5) map.set(key(t), 0)
-  ts.forEach((t) => map.set(key(t), (map.get(key(t)) || 0) + 1))
-  const byHour = new Array(24).fill(0)
-  list.forEach((c) => { if (!isNaN(c.createdTs) && !c.dateApprox) byHour[new Date(c.createdTs).getHours()]++ })
-  return { buckets: [...map].map(([label, n]) => ({ label, n })), per: hourly ? 'hora' : 'día', approx: list.some((c) => c.dateApprox), byHour }
+export interface Bucket { label: string; from: number; n: number; pos: number; neu: number; neg: number; avg: number }
+export interface Activity { buckets: Bucket[]; per: 'hora' | 'día' | 'semana'; approx: boolean; byHour: number[]; byWeekday: number[]; peak: Bucket | null; trend: { dir: 'up' | 'down' | 'flat'; pct: number } | null }
+
+/**
+ * Actividad en el tiempo: por hora (menos de 2 días), por día (hasta ~4 meses) o por semana.
+ * Cada periodo lleva su sentimiento y una media móvil; la tendencia compara el último tercio con el primero.
+ */
+export function activity(list: Comment[]): Activity {
+  const dated = list.filter((c) => !isNaN(c.createdTs))
+  const byHour = new Array(24).fill(0), byWeekday = new Array(7).fill(0)
+  dated.forEach((c) => { if (!c.dateApprox) byHour[new Date(c.createdTs).getHours()]++; byWeekday[(new Date(c.createdTs).getDay() + 6) % 7]++ })
+  const approx = list.some((c) => c.dateApprox)
+  if (!dated.length) return { buckets: [], per: 'día', approx, byHour, byWeekday, peak: null, trend: null }
+  const ts = dated.map((c) => c.createdTs), mn = Math.min(...ts), mx = Math.max(...ts)
+  const per: Activity['per'] = mx - mn < 2 * 864e5 ? 'hora' : mx - mn > 120 * 864e5 ? 'semana' : 'día'
+  const start = (t: number) => {
+    const d = new Date(t)
+    if (per === 'hora') { d.setMinutes(0, 0, 0); return d.getTime() }
+    d.setHours(0, 0, 0, 0)
+    if (per === 'semana') d.setDate(d.getDate() - ((d.getDay() + 6) % 7))   // semanas de lunes a domingo
+    return d.getTime()
+  }
+  const label = (t: number) => {
+    const d = new Date(t)
+    return per === 'hora' ? `${d.getDate()}/${d.getMonth() + 1} ${String(d.getHours()).padStart(2, '0')} h` : per === 'semana' ? `Sem. ${d.toLocaleDateString('es', { day: 'numeric', month: 'short' })}` : d.toLocaleDateString('es', { day: 'numeric', month: 'short' })
+  }
+  const map = new Map<number, Bucket>()
+  for (let t = start(mn); t <= mx; ) {
+    map.set(t, { label: label(t), from: t, n: 0, pos: 0, neu: 0, neg: 0, avg: 0 })
+    const d = new Date(t)
+    if (per === 'hora') d.setHours(d.getHours() + 1); else d.setDate(d.getDate() + (per === 'semana' ? 7 : 1))
+    t = d.getTime()
+  }
+  dated.forEach((c) => { const b = map.get(start(c.createdTs)); if (!b) return; b.n++; c.sentiment === 'positivo' ? b.pos++ : c.sentiment === 'negativo' ? b.neg++ : b.neu++ })
+  const buckets = [...map.values()]
+  const w = buckets.length > 30 ? 7 : 3
+  buckets.forEach((b, i) => { const win = buckets.slice(Math.max(0, i - w + 1), i + 1); b.avg = win.reduce((a, x) => a + x.n, 0) / win.length })
+  const peak = buckets.reduce<Bucket | null>((m, b) => (!m || b.n > m.n ? b : m), null)
+  let trend: Activity['trend'] = null
+  if (buckets.length >= 6) {
+    const k = Math.floor(buckets.length / 3), mean = (a: Bucket[]) => a.reduce((s2, b) => s2 + b.n, 0) / a.length
+    const a = mean(buckets.slice(0, k)), z = mean(buckets.slice(-k))
+    const pct = a ? Math.round(((z - a) / a) * 100) : z ? 100 : 0
+    trend = { dir: Math.abs(pct) < 15 ? 'flat' : pct > 0 ? 'up' : 'down', pct }
+  }
+  return { buckets, per, approx, byHour, byWeekday, peak, trend }
 }
 
 /* ---------- Equipo: quién responde y qué está pendiente ---------- */
@@ -99,7 +132,7 @@ export function focusKeywords(q: string) {
   const ws = normName(q).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 4 && !FOCUS_STOP.has(w))
   return [...new Set(ws.flatMap((w) => { const b = w.replace(/\d+$/, ''); return b.length >= 4 && b !== w ? [w, b] : [w] }).flatMap((w) => [w, w.replace(/k/g, 'c').replace(/z/g, 's')]))]
 }
-const focusText = (c: Comment) => { const t = normName((c.text || '') + ' ' + (c.mentions || []).join(' ')).replace(/k/g, 'c').replace(/z/g, 's'); return t + ' ' + t.replace(/[\s\-_.]+/g, '') }
+export const focusTextOf = (c: Comment) => { const t = normName((c.text || '') + ' ' + (c.mentions || []).join(' ')).replace(/k/g, 'c').replace(/z/g, 's'); return t + ' ' + t.replace(/[\s\-_.]+/g, '') }
 export const fkey = (c: Comment) => (c._ref?.postId || '') + '|' + normName((c.authorName || '') + ' ' + (c.text || '')).slice(0, 160)
 
 export async function focusMatch(list: Comment[], q: string, onProg?: (a: number, b: number) => void) {
@@ -107,7 +140,7 @@ export async function focusMatch(list: Comment[], q: string, onProg?: (a: number
   if (!items.length) return keys
   const need: Comment[] = []
   items.forEach((c) => {
-    if (kws.some((k) => focusText(c).includes(k))) keys.add(fkey(c))
+    if (kws.some((k) => focusTextOf(c).includes(k))) keys.add(fkey(c))
     else if (normName(c.text).split(/[^a-z0-9ñ]+/).filter((w) => w.length > 1).length >= 5) need.push(c)
   })
   if (need.length) {
@@ -145,6 +178,50 @@ export async function semanticScores(list: Comment[], q: string, onProg?: (a: nu
 /* ---------- Opiniones que más se repiten ---------- */
 const AVOID_RE = /(^|[^\p{L}])(no (compres|compren|compro|recomiendo)|nunca mas (compro|pido|vuelvo)|no vuelvo mas)(?=$|[^\p{L}])/u
 const PREFER_RE = /(^|[^\p{L}])(prefiero|preferible|me quedo con|es preferible)(?=$|[^\p{L}])/u
+/* ---------- Comentarios de mayor impacto, agrupados, y quién más comenta de cada tipo ---------- */
+/** Impacto de un comentario: reacciones + 2 por cada respuesta (una respuesta implica más conversación que un «me gusta»). */
+export const impactOf = (c: Comment) => (c.reactions || 0) + 2 * (c.repliesCount || 0)
+
+export interface ImpactGroup { rep: Comment; items: Comment[]; impact: number; reactions: number; replies: number; authors: number }
+
+/**
+ * Comentarios del público de un tipo (positivo o negativo), agrupados por parecido (palabras en común ≥ 30 %),
+ * ordenados por el impacto total del grupo. El representante es el de más impacto del grupo.
+ */
+export function impactGroups(list: Comment[], sent: Sentiment, max = 5): ImpactGroup[] {
+  const jacc = (a: Set<string>, b: Set<string>) => { let i = 0; a.forEach((x) => { if (b.has(x)) i++ }); return i / Math.max(1, a.size + b.size - i) }
+  const cands = list.filter((c) => !c.isTeam && c.sentiment === sent && c.text?.trim())
+    .map((c) => ({ c, toks: new Set(tokenize(c.text).map(norm).filter((x) => x.length > 2 && !STOP.has(x))) }))
+    .sort((a, b) => impactOf(b.c) - impactOf(a.c) || b.c.text.length - a.c.text.length)
+  const groups: { items: typeof cands }[] = []
+  cands.forEach((x) => {
+    const g = x.toks.size >= 2 ? groups.find((g) => jacc(g.items[0].toks, x.toks) >= 0.3) : undefined
+    if (g) g.items.push(x); else groups.push({ items: [x] })
+  })
+  return groups.map((g) => {
+    const items = g.items.map((x) => x.c)
+    return {
+      rep: items[0], items,
+      impact: items.reduce((a, c) => a + impactOf(c), 0),
+      reactions: items.reduce((a, c) => a + (c.reactions || 0), 0),
+      replies: items.reduce((a, c) => a + (c.repliesCount || 0), 0),
+      authors: new Set(items.map((c) => c.authorName)).size,
+    }
+  }).sort((a, b) => b.impact - a.impact || b.items.length - a.items.length).slice(0, max)
+}
+
+/** Personas del público que más comentan de un tipo, con las reacciones que suman sus comentarios. */
+export function topAuthorsBy(list: Comment[], sent: Sentiment, n = 6) {
+  const m = new Map<string, { name: string; count: number; reactions: number }>()
+  list.forEach((c) => {
+    if (c.isTeam || c.sentiment !== sent || !c.authorName) return
+    const e = m.get(c.authorName) || { name: c.authorName, count: 0, reactions: 0 }
+    e.count++; e.reactions += c.reactions || 0
+    m.set(c.authorName, e)
+  })
+  return [...m.values()].sort((a, b) => b.count - a.count || b.reactions - a.reactions).slice(0, n)
+}
+
 export function reportOpinions(list: Comment[], max = 6) {
   const jacc = (a: Set<string>, b: Set<string>) => { let i = 0; a.forEach((x) => { if (b.has(x)) i++ }); return i / Math.max(1, a.size + b.size - i) }
   type Cand = { t: string; c: Comment; toks: Set<string>; s: Sentiment }

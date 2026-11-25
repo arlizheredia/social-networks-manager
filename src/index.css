@@ -104,7 +104,6 @@ dialog[open] { animation: dlg-in .16s ease-out; }
 .report-view blockquote { margin: 4px 0 10px; padding: 6px 12px; border-left: 3px solid var(--outline-2); background: var(--surface-2); border-radius: 0 8px 8px 0; }
 .report-view .muted { color: var(--text-2); font-size: 12px; }
 .report-view .pos { color: var(--success); } .report-view .neg { color: var(--error); }
-.report-view .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 6px 0 12px; }
 
 /* Contenido HTML generado (ayuda e informes) */
 .help-body p, .prose-report p { margin: 0 0 8px; }
@@ -120,8 +119,6 @@ dialog[open] { animation: dlg-in .16s ease-out; }
 .prose-report th, .prose-report td { border: 1px solid var(--outline-2); padding: 6px 8px; text-align: left; vertical-align: top; }
 .prose-report th { background: var(--surface-2); font-weight: 500; }
 .prose-report blockquote { margin: 6px 0 10px; padding: 6px 12px; border-left: 3px solid var(--outline-2); background: var(--surface-2); border-radius: 0 12px 12px 0; }
-.prose-report .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 6px 0 12px; }
-.prose-report .bar i { display: block; }
 .help-body p, .help-body li { margin: 0 0 8px; line-height: 22px; }
 .help-body ul, .help-body ol { padding-left: 22px; list-style: revert; margin-bottom: 8px; }
 .help-body b { color: var(--text); font-weight: 500; }
@@ -138,3 +135,32 @@ html:not(.ms-ready) .ms { color: transparent !important; }
 @keyframes snm-rotate { to { transform: rotate(360deg); } }
 @keyframes snm-dash { 0% { stroke-dasharray: 1 176; stroke-dashoffset: 0; } 50% { stroke-dasharray: 110 176; stroke-dashoffset: -30; } 100% { stroke-dasharray: 110 176; stroke-dashoffset: -175; } }
 @keyframes snm-pulse { 0%, 100% { transform: scale(.92); } 50% { transform: scale(1); } }
+
+/* Desplegables: flecha propia, separada del borde como el icono del campo de fecha */
+.snm-select {
+  appearance: none; -webkit-appearance: none;
+  background-image: var(--select-arrow); background-repeat: no-repeat;
+  background-position: right 14px center; background-size: 20px 20px;
+}
+:root { --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23444746' d='M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z'/%3E%3C/svg%3E"); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23c4c7c5' d='M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z'/%3E%3C/svg%3E"); } }
+:root[data-theme="dark"] { --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23c4c7c5' d='M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z'/%3E%3C/svg%3E"); }
+.snm-select:disabled { background-image: none; }
+
+/* Gráficos: paleta validada (scripts de dataviz) contra las superficies de la app.
+   Serie principal azul; sentimiento divergente azul (positivo) ↔ gris neutro ↔ rojo (negativo). */
+:root {
+  --viz-1: #257de0; --viz-1-wash: rgba(37, 125, 224, .10); --viz-pos: #257de0; --viz-neg: #ec4647; --viz-neu: #e3e3e3;
+  --viz-grid: #e7e7e7; --viz-axis: #c2c2c2; --viz-ink: #191919; --viz-ink-2: #666666; --viz-on-fill: #ffffff; --viz-on-neu: #0b0b0b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --viz-1: #338ced; --viz-1-wash: rgba(51, 140, 237, .12); --viz-pos: #338ced; --viz-neg: #eb6263; --viz-neu: #3a3b3d;
+    --viz-grid: #303132; --viz-axis: #4a4b4d; --viz-ink: #efefef; --viz-ink-2: #9c9c9c; --viz-on-fill: #ffffff; --viz-on-neu: #efefef;
+  }
+}
+:root[data-theme="dark"] {
+  --viz-1: #338ced; --viz-1-wash: rgba(51, 140, 237, .12); --viz-pos: #338ced; --viz-neg: #eb6263; --viz-neu: #3a3b3d;
+  --viz-grid: #303132; --viz-axis: #4a4b4d; --viz-ink: #efefef; --viz-ink-2: #9c9c9c; --viz-on-fill: #ffffff; --viz-on-neu: #efefef;
+}
+

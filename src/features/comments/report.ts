@@ -178,8 +178,6 @@ function writeTexts(m: ReportModel) {
   m.conclusions = C
 
   const R: string[] = []
-  if (m.pending) R.push(`Responder los ${countTxt(m.pending, 'comentario pendiente', 'comentarios pendientes')}, empezando por las preguntas y los negativos.`)
-  if (c.s.neg) R.push('Revisar los comentarios negativos destacados y contactar por privado a quienes reportan problemas.')
   if (m.fans.length) R.push('Agradecer y reconocer a quienes más comentan a favor: son posibles embajadores de la marca.')
   if (m.rivals.length) R.push('Vigilar las menciones a la competencia para detectar comparaciones de precio o servicio.')
   if (!R.length) R.push('Mantener el seguimiento periódico de los comentarios.')

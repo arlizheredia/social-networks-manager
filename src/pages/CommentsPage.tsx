@@ -6,8 +6,8 @@ import { TrackingPanel } from '@/features/comments/components/Tracking'
 import { Obtain } from '@/features/comments/components/Obtain'
 import { Summary } from '@/features/comments/components/Summary'
 import { CommentList } from '@/features/comments/components/CommentList'
-import { clearExplore, filtered, restoreExplore, useExplore } from '@/features/comments/explore'
-import { exportComments, toTable, toText } from '@/features/comments/exports'
+import { clearExplore, filtered, restoreExplore, setPeople, useExplore } from '@/features/comments/explore'
+import { exportComments, exportReport, toTable, toText } from '@/features/comments/exports'
 import { usePrefs } from '@/features/comments/prefs'
 import { platName } from '@/features/comments/text'
 import { useTR } from '@/features/comments/tracking'
@@ -20,7 +20,8 @@ function Explore() {
   const [view, setView] = useState<'list' | 'summary'>('summary')
   const [obtain, setObtain] = useState(false)
   useEffect(() => { restoreExplore() }, [])
-  useEffect(() => { setObtain(false); setView('summary') }, [s.version])
+  // solo al abrir otros comentarios se vuelve al resumen (responder o recalcular no cambia de pestaña)
+  useEffect(() => { setObtain(false); setView('summary') }, [s.loadId])
   if (!s.comments.length || obtain) return <Obtain />
   const list = filtered(s, semLevel).list
   return (
@@ -45,6 +46,12 @@ function Explore() {
         </Popover>
         <Popover align="right" trigger={(o) => <Button variant="outlined" icon="download" onClick={o}>Exportar</Button>}>
           {(close) => <>
+            <div className="px-3 pt-1 pb-0.5 text-xs text-text-2">Informe</div>
+            <MenuItem icon="description" onClick={() => { close(); exportReport('word', list, s.meta) }}>Informe Word (.doc)</MenuItem>
+            <MenuItem icon="picture_as_pdf" onClick={() => { close(); exportReport('pdf', list, s.meta) }}>Informe PDF</MenuItem>
+            <MenuItem icon="html" onClick={() => { close(); exportReport('html', list, s.meta) }}>Informe HTML</MenuItem>
+            <div className="my-1 h-px bg-outline-2" />
+            <div className="px-3 pt-1 pb-0.5 text-xs text-text-2">Comentarios</div>
             <MenuItem icon="table_view" onClick={() => { close(); exportComments('csv', list, s.meta) }}>Excel / CSV</MenuItem>
             <MenuItem icon="data_object" onClick={() => { close(); exportComments('json', list, s.meta) }}>JSON</MenuItem>
             <MenuItem icon="description" onClick={() => { close(); exportComments('txt', list, s.meta) }}>Texto (.txt)</MenuItem>
@@ -58,7 +65,7 @@ function Explore() {
         </Popover>
       </div>
       <Tabs value={view} onChange={setView} tabs={[{ id: 'summary', label: 'Resumen', icon: 'insights' }, { id: 'list', label: 'Comentarios', icon: 'forum', badge: s.comments.length.toLocaleString('es') }]} />
-      {view === 'summary' ? <Summary list={s.comments} platform={s.meta?.platform || 'facebook'} onSearch={(q) => { useExplore.setState({ mode: 'person', q: q.replace(/^@/, ''), sem: null }); setView('list') }} /> : <CommentList />}
+      {view === 'summary' ? <Summary list={s.comments} platform={s.meta?.platform || 'facebook'} onSearch={(q) => { setPeople([q.replace(/^@/, '')]); useExplore.setState({ sem: null }); setView('list') }} /> : <CommentList />}
     </div>
   )
 }

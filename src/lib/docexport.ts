@@ -28,8 +28,6 @@ const CSS = (mono: boolean) => `
   .muted { color: #5f6368; font-size: 9.5pt; }
   .pos { color: ${mono ? '#000' : '#146c2e'}; } .neg { color: ${mono ? '#000' : '#b3261e'}; }
   blockquote { margin-top: 4pt; margin-right: 0; margin-bottom: 8pt; margin-left: 0; padding-top: 4pt; padding-bottom: 4pt; padding-left: 10pt; padding-right: 10pt; border-left: 3px solid #c4c7c5; }
-  .bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 4pt; margin-right: 0; margin-bottom: 10pt; margin-left: 0; }
-  .bar i { display: block; }
 `
 
 export function htmlDocument(title: string, body: string, mono = false) {
