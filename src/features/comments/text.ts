@@ -73,11 +73,16 @@ const POS = ['bueno', 'buena', 'buenos', 'buenas', 'excelente', 'genial', 'graci
   'mejores', 'lo mejor', 'excelentes', 'buenisimo', 'buenísimo', 'buenisima', 'buenísima',
   'puntual', 'puntuales', 'eficiente', 'eficientes', 'amable', 'amables', 'atento', 'atenta', 'atentos', 'personalizada', 'personalizado', 'satisfecho', 'satisfecha', 'satisfechos', 'contento', 'contenta', 'contentos', 'fresco', 'fresca', 'frescos', 'frescas', 'confiable', 'confiables', 'seguro', 'segura', 'responsables', 'profesional', 'profesionales', 'impecable', 'encantado', 'encantada', 'agradezco', 'riquísimo', 'riquisimo', 'rico', 'rica', 'delicioso', 'deliciosa', 'ok', 'fast', 'friendly', 'fresh', 'reliable']
 const NEG = ['malo', 'mala', 'malos', 'malas', 'pésimo', 'pesimo', 'pésima', 'pesima', 'horrible', 'terrible', 'odio', 'asco', 'fraude', 'estafa', 'estafadores', 'mentira', 'mentiras', 'mentirosos', 'peor', 'basura', 'triste', 'decepción', 'decepcion', 'decepcionado', 'decepcionada', 'problema', 'problemas', 'queja', 'nunca', 'lamentable', 'vergüenza', 'verguenza', 'robo', 'ladrones', 'caro', 'lento', 'error', 'falla', 'fallas', 'mal', 'tarde', 'molesto', 'molesta', 'indignante', 'abuso', 'denuncia', 'cancelar', 'bad', 'worst', 'hate', 'awful', 'scam', 'fraud', 'poor', 'sad', 'angry', 'disappointed', 'problem', 'slow', 'broken', 'fake', 'never',
-  'falló', 'fallo', 'fallaron', 'fallan', 'fallando', 'desagradable', 'desagradables', 'tardanza', 'tardanzas', 'demora', 'demoras', 'demorado', 'retraso', 'retrasos', 'retrasado', 'maloliente', 'malolientes', 'podrido', 'podrida', 'podridos', 'podridas', 'vencido', 'vencida', 'vencidos', 'vencidas', 'roto', 'rota', 'rotos', 'rotas', 'dañado', 'dañada', 'dañados', 'dañadas', 'defectuoso', 'defectuosa', 'incompleto', 'incompleta', 'equivocado', 'equivocada', 'apestoso', 'apestosa', 'asqueroso', 'asquerosa', 'engaño', 'engañan', 'engañaron', 'engañado', 'engañada', 'estafaron', 'estafado', 'estafada', 'robaron', 'robado', 'irresponsable', 'irresponsables', 'incumplen', 'incumplieron', 'incumplimiento', 'pérdida', 'perdida', 'perdido', 'frustrante', 'frustrado', 'frustrada', 'insatisfecho', 'insatisfecha', 'descontento', 'descontenta', 'inaceptable', 'desastre', 'fatal', 'nefasto', 'nefasta', 'mediocre', 'ineficiente', 'ineficientes', 'grosero', 'grosera', 'groseros', 'maltrato', 'reclamo', 'reclamación', 'reclamacion', 'devolución', 'devolucion', 'reembolso', 'nadie', 'ignoran', 'espera', 'esperando', 'tardaron', 'tardan', 'tarda', 'demoran', 'demoraron', 'jamás', 'jamas', 'cobran', 'cobraron', 'abusivo', 'abusivos', 'olor', 'hediondo', 'feo', 'fea', 'feos', 'feas', 'disgusto', 'arrepentido', 'arrepentida', 'horror', 'desastroso', 'desastrosa', 'rude', 'late', 'delay', 'delayed', 'rotten', 'damaged', 'refund', 'worse']
+  'falló', 'fallo', 'fallaron', 'fallan', 'fallando', 'desagradable', 'desagradables', 'tardanza', 'tardanzas', 'demora', 'demoras', 'demorado', 'retraso', 'retrasos', 'retrasado', 'maloliente', 'malolientes', 'podrido', 'podrida', 'podridos', 'podridas', 'vencido', 'vencida', 'vencidos', 'vencidas', 'roto', 'rota', 'rotos', 'rotas', 'dañado', 'dañada', 'dañados', 'dañadas', 'defectuoso', 'defectuosa', 'incompleto', 'incompleta', 'equivocado', 'equivocada', 'apestoso', 'apestosa', 'asqueroso', 'asquerosa', 'engaño', 'engañan', 'engañaron', 'engañado', 'engañada', 'estafaron', 'estafado', 'estafada', 'robaron', 'robado', 'irresponsable', 'irresponsables', 'incumplen', 'incumplieron', 'incumplimiento', 'pérdida', 'perdida', 'perdido', 'frustrante', 'frustrado', 'frustrada', 'insatisfecho', 'insatisfecha', 'descontento', 'descontenta', 'inaceptable', 'desastre', 'fatal', 'nefasto', 'nefasta', 'mediocre', 'ineficiente', 'ineficientes', 'grosero', 'grosera', 'groseros', 'maltrato', 'reclamo', 'reclamación', 'reclamacion', 'devolución', 'devolucion', 'reembolso', 'nadie', 'ignoran', 'espera', 'esperando', 'tardaron', 'tardan', 'tarda', 'demoran', 'demoraron', 'jamás', 'jamas', 'cobran', 'cobraron', 'abusivo', 'abusivos', 'olor', 'hediondo', 'feo', 'fea', 'feos', 'feas', 'disgusto', 'arrepentido', 'arrepentida', 'horror', 'desastroso', 'desastrosa', 'rude', 'late', 'delay', 'delayed', 'rotten', 'damaged', 'refund', 'worse',
+  // calidad de alimentos y productos
+  'descongelado', 'descongelada', 'descongelados', 'descongeladas', 'crudo', 'cruda', 'crudos', 'crudas', 'quemado', 'quemada', 'quemados', 'quemadas',
+  'rancio', 'rancia', 'rancios', 'rancias', 'caducado', 'caducada', 'caducados', 'caducadas', 'mohoso', 'mohosa', 'moho', 'insípido', 'insipido', 'insípida', 'insipida',
+  'aguado', 'aguada', 'salado', 'salada', 'sucio', 'sucia', 'sucios', 'sucias', 'derretido', 'derretida', 'abollado', 'abollada', 'aplastado', 'aplastada',
+  'golpeado', 'golpeada', 'magullado', 'magullada', 'pegajoso', 'pegajosa', 'faltó', 'falto', 'faltaron', 'faltaba', 'faltaban', 'expired', 'spoiled', 'stale', 'burnt', 'raw', 'dirty']
 const POS_E = ['❤', '😍', '🥰', '😊', '😁', '😀', '😃', '👍', '👏', '🙌', '💯', '🔥', '🎉', '💪', '😂', '🤣', '💙', '💚', '💛', '💜', '♥', '😘', '🤩', '✨', '🙏']
 const NEG_E = ['😡', '😠', '🤬', '👎', '😢', '😭', '😞', '😒', '🙄', '💩', '😤', '😔', '😩', '😫', '🤮', '😑']
 const POSS = new Set(POS), NEGS = new Set(NEG)
-const NEG_STEMS = ['desagrad', 'tardanz', 'demor', 'retras', 'malolient', 'podrid', 'apest', 'asquer', 'estaf', 'engan', 'defectuos', 'incumpl', 'irrespons', 'decepcion', 'frustr', 'insatisf', 'descontent', 'indign', 'pesim', 'horribl', 'lamentabl', 'vergonz', 'abusiv', 'fraudul']
+const NEG_STEMS = ['desagrad', 'tardanz', 'demor', 'retras', 'malolient', 'podrid', 'apest', 'asquer', 'estaf', 'engan', 'defectuos', 'incumpl', 'irrespons', 'decepcion', 'frustr', 'insatisf', 'descontent', 'indign', 'pesim', 'horribl', 'lamentabl', 'vergonz', 'abusiv', 'fraudul', 'descongel', 'caducad', 'insipid', 'mohos', 'abollad', 'aplastad', 'magullad']
 const POS_STEMS = ['recomend', 'agradec', 'excelen', 'encant', 'maravill', 'fantast', 'satisf', 'puntual', 'eficien', 'profesional', 'felicit', 'impecabl']
 const ADVERSATIVE = new Set(['pero', 'aunque', 'sin embargo', 'embargo', 'but', 'however'])
 const NEGATORS = new Set(['no', 'nunca', 'ni', 'jamás', 'jamas', 'not', 'never', 'sin'])
@@ -99,6 +104,43 @@ function polarity(w: string) {
 }
 
 /**
+ * Temperatura según lo que se nombra cerca (hasta 4 palabras): «cerveza fría» es un elogio y «pizza fría», una queja;
+ * con «caliente» es al revés. Sin bebida ni comida cerca no cuenta.
+ */
+const COLD = /^(fri[oa]s?|fresquit[oa]s?|helad[oa]s?|heladit[oa]s?|congelad[oa]s?|cold|iced)$/
+const HOT = /^(calientes?|calentit[oa]s?|tibi[oa]s?|hot|warm)$/
+const DRINK = /^(carnes?|pollos?|pescados?|mariscos?|camarones?|cerdo|res|embutidos?|jamon|jamones|salchichas?|picadillo|queso|quesos|leches?|yogures?|yogur|mantequillas?|helados?|cervezas?|birras?|refrescos?|bebidas?|aguas?|jugos?|zumos?|colas?|maltas?|vinos?|sodas?|limonadas?|batidos?|tragos?|cocteles?|cocktails?|beers?|drinks?|sodas?)$/
+const FOOD = /^(comidas?|pizzas?|sopas?|cafes?|hamburguesas?|papas?|patatas?|pan|panes|arroz|platos?|pedidos?|almuerzos?|cenas?|desayunos?|pastas?|frituras?|croquetas?|empanadas?|tacos?|food|meal|coffee|fries)$/
+function tempPolarity(toks: string[], i: number) {
+  const n = norm(toks[i]), cold = COLD.test(n), hot = HOT.test(n)
+  if (!cold && !hot) return 0
+  // bebidas y productos que se venden fríos (carne, pollo, lácteos…): frío es bueno; comida servida: caliente es bueno
+  let kind: 'drink' | 'food' | null = null
+  for (let d = 1; d <= 4 && !kind; d++) for (const j of [i - d, i + d]) { const w = toks[j] && norm(toks[j]); if (!w) continue; if (DRINK.test(w)) { kind = 'drink'; break } if (FOOD.test(w)) { kind = 'food'; break } }
+  if (!kind) return 0
+  return (kind === 'drink') === cold ? 1 : -1
+}
+
+/**
+ * Precios: «precios altos», «los cambios muy caros», «la página está cara» son quejas; «precios bajos», elogio.
+ * «cara» solo cuenta como adjetivo (tras «está», «muy», «tan»…), no como «cara a cara».
+ */
+const PRICE = /^(precios?|costos?|coste|costes|tarifas?|cambios?|tasas?|comision|comisiones|envios?|domicilios?|delivery|mensajeria|cobros?|cuotas?|valor|prices?|fees?|shipping|rates?)$/
+const HIGH = /^(altos?|altas?|elevad[oa]s?|car[oa]s|carisim[oa]s?|excesiv[oa]s?|high|expensive)$/
+const LOW = /^(baj[oa]s?|economic[oa]s?|accesibles?|asequibles?|barat[oa]s?|baratisim[oa]s?|low|cheap)$/
+const BEFORE_ADJ = new Set(['esta', 'estan', 'es', 'son', 'muy', 'tan', 'bastante', 'demasiado', 'mas', 'algo', 're', 'super', 'carisima', 'sale', 'salen', 'resulta', 'resultan'])
+function pricePolarity(toks: string[], i: number) {
+  const n = norm(toks[i])
+  if ((n === 'cara' || n === 'caro') && i > 0 && BEFORE_ADJ.has(norm(toks[i - 1]))) return -1
+  const high = HIGH.test(n), low = LOW.test(n)
+  if (!high && !low) return 0
+  const near = [-3, -2, -1, 1, 2, 3].some((d) => toks[i + d] && PRICE.test(norm(toks[i + d])))
+  // «carísimo», «caros» se quejan aunque no se nombre el precio
+  if (!near) return high && /^car/.test(n) ? -1 : 0
+  return high ? -1 : 1
+}
+
+/**
  * +1 por término positivo, −1,5 por negativo (las quejas pesan más que los elogios de cortesía);
  * la negación previa invierte; lo que sigue a «pero/aunque» vale el doble; los emojis suman o restan 1.
  */
@@ -108,7 +150,7 @@ export function sentiment(text: string): { score: number; label: Sentiment } {
   toks.forEach((w, i) => {
     if (ADVERSATIVE.has(w)) { boost = 2; return }
     if (w === 'nadie' && i > 0 && (toks[i - 1] === 'que' || toks[i - 1] === 'como')) return
-    const pol = polarity(w)
+    const pol = tempPolarity(toks, i) || pricePolarity(toks, i) || polarity(w)
     if (!pol) return
     const neg = (i > 0 && NEGATORS.has(toks[i - 1])) || (i > 1 && NEGATORS.has(toks[i - 2]) && !polarity(toks[i - 1]))
     const v = neg ? -pol : pol
