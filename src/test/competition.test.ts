@@ -170,6 +170,7 @@ describe('Informe de competencia', () => {
     expect(m.combos?.floor).toMatchObject({ who: 'Fagales Market', combo: { name: 'Combo cárnico', price: 117.65 } })
     expect(html).toContain('<h3>2.4 Combos de comida</h3>')
     expect(html).not.toContain('Gestión de la marca')
+    expect(html).not.toContain('Pendientes para el próximo informe')
     expect(m.summary.join(' ')).toMatch(/El combo más barato del mercado está en 117.65 USD/)
     expect(html).toMatch(/<th>Combo desde<\/th>/)
     // resumen profesional con los datos

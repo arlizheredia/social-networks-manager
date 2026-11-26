@@ -99,7 +99,6 @@ export function compHtml(m: CompModel) {
 
   if (m.proposals.length) H.push('<h2>5. Propuestas de contenido para Facebook</h2>', ...m.proposals.map((p, i) => `<p><b>${i + 1}. ${esc(p.title)}.</b> Texto sugerido: ${esc(p.text)}</p><p class="muted">Objetivo: ${esc(p.goal)}</p>`))
   H.push('<h2>6. Recomendaciones y próximos pasos</h2>', '<ol>' + m.recommendations.map((r) => `<li>${esc(r)}</li>`).join('') + '</ol>')
-  if (m.pending.length) H.push('<p><b>Pendientes para el próximo informe:</b></p>', ul(m.pending))
   H.push('<h2>7. Conclusiones</h2>', ...m.conclusions.map((c) => `<p>${esc(c)}</p>`))
   if (m.annexes.length) H.push('<h2>8. Anexos</h2>', ul(m.annexes))
   if (m.author) H.push(`<p><b>Firma:</b><br>${esc(m.author)}</p>`)
