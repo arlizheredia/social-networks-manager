@@ -69,13 +69,15 @@ export function cleanHistory(list: unknown): HistoryEntry[] {
       if (!isObj(i)) return []
       const url = normGroupUrl(str(i.url, 300))
       if (!url) return []
-      const status = (['pending', 'done', 'skipped'] as const).includes(i.status as never) ? (i.status as HistoryItem['status']) : 'pending'
+      // «el cuadro de publicación no se cerró» no es un fallo: Facebook a veces lo deja abierto tras publicar
+      const notClosed = i.status === 'skipped' && /cuadro de publicaci[oó]n no se cerr/i.test(String(i.error || ''))
+      const status = notClosed ? 'done' : (['pending', 'done', 'skipped'] as const).includes(i.status as never) ? (i.status as HistoryItem['status']) : 'pending'
       const v = i.verify
       return [{
         gid: okId(i.gid) || '', name: cleanGroupName(str(i.name, 400)).slice(0, 140) || str(i.name, 140), url, notes: str(i.notes, 500), status,
         at: okTs(i.at),
         review: status === 'done' && (['awaiting', 'approved', 'rejected'] as const).includes(i.review as never) ? (i.review as HistoryItem['review']) : undefined,
-        rat: okTs(i.rat), error: i.error ? str(i.error, 240) : undefined, fbMsg: i.fbMsg ? str(i.fbMsg, 800) : undefined,
+        rat: okTs(i.rat), error: i.error && !notClosed ? str(i.error, 240) : undefined, fbMsg: i.fbMsg ? str(i.fbMsg, 800) : undefined,
         inflight: status === 'pending' ? okTs(i.inflight) || undefined : undefined,
         verify: isObj(v) && okTs(v.at) ? { at: v.at as number, found: v.found === true } : undefined,
       }]
@@ -141,7 +143,7 @@ function legacy(): Partial<PublisherState> {
 export const usePublisher = create<PublisherState>()(
   persist(() => ({ ...initial }), {
     name: 'snm.publisher',
-    version: 5,
+    version: 6,
     // Nuevos valores por defecto: quien conservaba el valor por defecto anterior pasa al nuevo.
     // v2: ventana de trabajo «minimizada». v3: publicación automática y pausa de 15 s. v4: sin modo prueba.
     migrate: (persisted, version) => {

@@ -1,5 +1,5 @@
 {
-  "version": "2.1.1",
+  "version": "2.3.5",
   "files": [
     {
       "name": "background.js",
@@ -27,7 +27,7 @@
     },
     {
       "name": "fb.js",
-      "sha256": "4a94ea69a7b01ed6164381aa2bce2c0d375eed392a359a210dba8bfc169d334c"
+      "sha256": "61fff4bcc99ad9361723543cf30cd7701d163f036491d72a74ab62ab0142c9af"
     },
     {
       "name": "icon.svg",
@@ -47,11 +47,19 @@
     },
     {
       "name": "manifest.json",
-      "sha256": "8408dcf8fbe892aa3b6fc3048973613f365280ff46280023eda8fe7ab2f305c6"
+      "sha256": "feeb13ab63fde0197a3bb8f5af924a09062d691553f970b34df9adbf83713f66"
+    },
+    {
+      "name": "permiso.html",
+      "sha256": "f5dda40357db988bcaa05c206d86c5779e879a41fa1d972c72d46e640443137e"
+    },
+    {
+      "name": "permiso.js",
+      "sha256": "bc4d0909753aae5b839140082885bc3768c76236d4a1a9443cab7c61af79cc5c"
     },
     {
       "name": "publisher.js",
-      "sha256": "b961dc2a0b1f3d4864223b970e50f730327afa2c051abfd35c85b744bfa228ea"
+      "sha256": "f4f28098dd7e2be7e4d46efb13875672dbfa166ba3212550ffe7ba361fdcee72"
     },
     {
       "name": "update.html",

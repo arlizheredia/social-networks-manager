@@ -57,6 +57,9 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
       osNotify({title: j.title.slice(0, 120), message: j.message.slice(0, 300)});
     send({ok: true}); return;
   }
+  if (msg.cmd === 'search') { webSearch(msg.job).then(send, e => send({ok: false, error: String((e && e.message) || e)})); return true; }
+  if (msg.cmd === 'sites') { readSites(msg.job).then(send, e => send({ok: false, error: String((e && e.message) || e)})); return true; }
+  if (msg.cmd === 'site') { readSite(msg.job).then(send, e => send({ok: false, error: String((e && e.message) || e)})); return true; }
   if (msg.cmd === 'preview') { preview(msg.job && msg.job.url).then(send, () => send({ok: false})); return true; }
   if (msg.cmd === 'closeFb') { closeAll().then(() => send({ok: true})); return true; }
   if (msg.cmd === 'status') { checkStatus(!!(msg.job && msg.job.details)).then(send); return true; }
@@ -85,6 +88,154 @@ const meta = (html, k) => {
   return m ? ent(m[1]) : '';
 };
 /* Vista previa de la publicación de origen: miniatura, título y descripción (etiquetas og:) */
+/* ---------- Sitio web de la marca ----------
+ * Lee las páginas públicas que indica el usuario (y unas pocas internas relevantes) para completar la ficha
+ * de su marca. Antes pide permiso solo para esos dominios (optional_host_permissions). */
+const SITE_KEYS = /(envio|envios|entrega|domicilio|cobertura|municipio|provincia|pago|pagar|zelle|combo|combos|tienda|catalogo|catálogo|productos?|product|categoria|category|coleccion|collection|precio|ofertas?|mas-vendidos|best|faq|preguntas|ayuda|nosotros|about|contacto|terminos|condiciones|shop|store|delivery|shipping|payment)/i;
+function pageText(html) {
+  const title = ent((html.match(/<title[^>]*>([^<]{1,300})<\/title>/i) || [])[1] || '').trim();
+  const desc = meta(html, 'description') || meta(html, 'og:description');
+  const body = html.replace(/<(script|style|noscript|svg|template|title)[\s\S]*?<\/\1>/gi, ' ').replace(/<br\s*\/?>|<\/(p|div|li|h[1-6]|tr|section|article)>/gi, '\n').replace(/<[^>]+>/g, ' ');
+  const text = ent(body).replace(/[ \t\u00a0]+/g, ' ').replace(/\s*\n\s*/g, '\n').replace(/\n{2,}/g, '\n').trim();
+  return {title, text: ((desc ? desc + '\n' : '') + text).slice(0, 20000)};
+}
+const linksOf = (html, base) => [...html.matchAll(/<a\s[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi)].map((m) => { try { return {url: new URL(ent(m[1]), base).href.split('#')[0], label: m[2].replace(/<[^>]+>/g, ' ')}; } catch { return null; } }).filter(Boolean);
+async function askSitePermission(origins) {
+  if (await chrome.permissions.contains({origins})) return true;
+  progress('Pidiendo permiso para leer el sitio de tu marca…');
+  const tab = await chrome.tabs.create({url: chrome.runtime.getURL('permiso.html?o=' + encodeURIComponent(origins.join(','))), active: true});
+  return new Promise((res) => {
+    const t = setTimeout(() => { chrome.runtime.onMessage.removeListener(l); res(false); }, 180000);
+    const l = (m) => { if (m && m.from === 'perm') { clearTimeout(t); chrome.runtime.onMessage.removeListener(l); res(!!m.granted); } };
+    chrome.runtime.onMessage.addListener(l);
+    chrome.tabs.onRemoved.addListener(function gone(id) { if (id === tab.id) { chrome.tabs.onRemoved.removeListener(gone); setTimeout(async () => res(await chrome.permissions.contains({origins})), 300); } });
+  });
+}
+/* Páginas que se generan con JavaScript: se abren en segundo plano y se lee el texto ya cargado. */
+async function renderedText(url) {
+  let tab;
+  try {
+    tab = await chrome.tabs.create({url, active: false});
+    await new Promise((res) => { const t = setTimeout(res, 12000); const l = (id, info) => { if (id === tab.id && info.status === 'complete') { clearTimeout(t); chrome.tabs.onUpdated.removeListener(l); res(); } }; chrome.tabs.onUpdated.addListener(l); });
+    await sleep(1200);
+    const [r] = await chrome.scripting.executeScript({target: {tabId: tab.id}, func: () => ({title: document.title, text: (document.body ? document.body.innerText : '').slice(0, 20000), links: [...document.querySelectorAll('a[href]')].slice(0, 400).map((a) => ({url: a.href, label: a.textContent || ''}))})});
+    return r && r.result;
+  } catch { return null; } finally { if (tab) chrome.tabs.remove(tab.id).catch(() => {}); }
+}
+/* Lee hasta `limit` páginas a partir de `seeds`, siguiendo solo enlaces internos relevantes de los orígenes permitidos. */
+async function crawl(seeds, allowed, limit, label, render = true) {
+  const queue = [...seeds], seen = new Set(), pages = [];
+  while (queue.length && pages.length < limit) {
+    const url = queue.shift();
+    if (seen.has(url)) continue;
+    seen.add(url);
+    progress(`Leyendo ${label || new URL(url).hostname}${new URL(url).pathname} (${pages.length + 1})…`);
+    let title = '', text = '', links = [];
+    try {
+      const r = await fetch(url, {credentials: 'omit', cache: 'no-store', redirect: 'follow', signal: AbortSignal.timeout(7000)});
+      const type = r.headers.get('content-type') || '';
+      if (r.ok && /html/i.test(type)) { const html = (await r.text()).slice(0, 3e6); ({title, text} = pageText(html)); links = linksOf(html, r.url || url); }
+    } catch {}
+    if (render && text.length < 150 && (!pages.length || seeds.includes(url))) { const got = await renderedText(url); if (got) { title = got.title || title; text = got.text || text; links = got.links || links; } }
+    if (text) pages.push({url, title: title.slice(0, 200), text});
+    links.filter((l) => { try { return allowed.has(new URL(l.url).origin) && SITE_KEYS.test(l.url + ' ' + l.label); } catch { return false; } })
+      .map((l) => l.url).filter((u) => !seen.has(u) && !/\.(jpe?g|png|gif|webp|pdf|zip|mp4)(\?|$)/i.test(u)).slice(0, 12).forEach((u) => { if (!queue.includes(u)) queue.push(u); });
+  }
+  return pages;
+}
+const cleanUrls = (list, max) => (list || []).map((u) => { try { const x = new URL(String(u).trim()); return /^https?:$/.test(x.protocol) ? x.href : null; } catch { return null; } }).filter(Boolean).slice(0, max);
+
+async function readSite(job) {
+  const seeds = cleanUrls(job && job.urls, 5);
+  if (!seeds.length) return {ok: false, error: 'Indica la dirección del sitio de tu marca (https://…)'};
+  const origins = [...new Set(seeds.map((u) => new URL(u).origin + '/*'))];
+  if (!(await askSitePermission(origins))) return {ok: false, step: 'perm', error: 'No se concedió permiso para leer el sitio.'};
+  const pages = await crawl(seeds, new Set(origins.map((o) => o.replace(/\/\*$/, ''))), 10);
+  progress('');
+  return pages.length ? {ok: true, pages} : {ok: false, error: 'No se pudo leer el sitio (¿está en línea?).'};
+}
+
+/* Varios sitios a la vez (competidores encontrados): un solo permiso para todos y pocas páginas por sitio. */
+async function readSites(job) {
+  const sites = ((job && job.sites) || []).map((s) => ({key: String(s.key || ''), urls: cleanUrls(s.urls, 6), per: +s.per || 0, render: !!s.render})).filter((s) => s.key && s.urls.length).slice(0, 15);
+  const per = Math.max(1, Math.min(4, +(job && job.perSite) || 2));
+  if (!sites.length) return {ok: true, sites: []};
+  const origins = [...new Set(sites.flatMap((s) => s.urls.map((u) => new URL(u).origin + '/*')))];
+  const granted = await askSitePermission(origins);
+  if (!granted) return {ok: false, step: 'perm', error: 'No se concedió permiso para leer los sitios encontrados.'};
+  const out = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < sites.length) {
+      const s = sites[next++];
+      const allowed = new Set(s.urls.map((u) => new URL(u).origin));
+      out.push({key: s.key, pages: await crawl(s.urls, allowed, Math.max(1, Math.min(8, s.per || per)), s.key, s.key === 'brand' || s.render)});
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker(), worker()]);
+  progress('');
+  return {ok: true, sites: out};
+}
+
+/* ---------- Búsqueda en Google ----------
+ * Se abre en una pestaña en segundo plano (como una búsqueda normal del usuario, con su navegador) y se leen los
+ * resultados ya cargados. Si Google pide verificar que no es un robot o aceptar cookies, la pestaña se muestra para
+ * resolverlo y la búsqueda sigue sola. */
+function readResults() {
+  const txt = document.body ? (document.body.innerText || document.body.textContent || '') : '';
+  const challenge = location.pathname.startsWith('/sorry') || /^consent\./.test(location.hostname) || !!document.querySelector('#captcha-form, form[action*="sorry"], iframe[src*="recaptcha"]') || /tráfico inusual|unusual traffic|no soy un robot|not a robot/i.test(txt);
+  const real = (h) => { try { const u = new URL(h, location.href); if (u.pathname === '/url' && (u.hostname.endsWith('google.com') || /^\/url\?/.test(h))) return u.searchParams.get('q') || u.searchParams.get('url') || h; return u.href; } catch { return h; } };
+  const out = [], seen = new Set();
+  document.querySelectorAll('#search a h3, #rso a h3').forEach((h3) => {
+    const a = h3.closest('a'); if (!a || a.closest('#tads, #bottomads, [data-text-ad]')) return;
+    const url = real(a.getAttribute('href') || a.href);
+    if (!/^https?:/.test(url) || /(^|\.)google\./.test(new URL(url).hostname) || seen.has(url)) return;
+    seen.add(url);
+    const box = a.closest('div.g, div[data-hveid], div[data-sokoban-container], div.MjjYud') || a.parentElement;
+    const sn = box && (box.querySelector('.VwiC3b, [data-sncf="1"], div[style*="-webkit-line-clamp"], .lEBKkf') || null);
+    out.push({title: h3.textContent.trim(), url, snippet: sn ? (sn.innerText || sn.textContent || '') : ''});
+  });
+  const empty = /no se han encontrado resultados|did not match any documents|no ha obtenido ningún resultado/i.test(txt);
+  return {challenge, results: out.slice(0, 20), empty};
+}
+async function webSearch(job) {
+  const queries = ((job && job.queries) || []).map((q) => String(q).trim()).filter(Boolean).slice(0, 16);
+  if (!queries.length) return {ok: true, results: []};
+  const parallel = Math.max(1, Math.min(3, +(job && job.parallel) || 2));
+  const results = [], tabs = []; let blocked = false, next = 0, done = 0, shownOnce = false;
+  // cada «trabajador» usa su propia pestaña y va tomando consultas; los resultados se leen en cuanto aparecen
+  const worker = async () => {
+    let tab = null;
+    try {
+      while (next < queries.length && !blocked) {
+        const qi = next++, q = queries[qi];
+        progress(`Buscando en Google (${done + 1} de ${queries.length}): «${q}»…`);
+        const url = 'https://www.google.com/search?hl=es&q=' + encodeURIComponent(q);
+        if (!tab) { tab = await chrome.tabs.create({url, active: false}); tabs.push(tab.id); } else await chrome.tabs.update(tab.id, {url});
+        await sleep(400);
+        let got = null, shown = false;
+        for (let k = 0; k < 600; k++) {
+          try { const [r] = await chrome.scripting.executeScript({target: {tabId: tab.id}, func: readResults}); got = r && r.result; } catch { got = null; }
+          if (got && got.challenge) {
+            if (!shown) { shown = true; shownOnce = true; await chrome.tabs.update(tab.id, {active: true}); const w = await chrome.tabs.get(tab.id); chrome.windows.update(w.windowId, {focused: true}).catch(() => {}); }
+            progress('Google pide una verificación (o aceptar cookies): resuélvela en la pestaña abierta y la búsqueda seguirá sola.');
+            await sleep(1000); continue;
+          }
+          if (got && (got.results.length >= 5 || got.empty || (got.results.length && k > 10) || k > 40)) break;
+          await sleep(200);
+        }
+        if (got && got.challenge) { blocked = true; break; }
+        (got && got.results || []).forEach((r, pos) => results.push({query: q, pos, title: r.title.slice(0, 200), url: r.url, snippet: r.snippet.replace(/\s+/g, ' ').trim().slice(0, 300)}));
+        done++;
+        if (next < queries.length) await sleep(300 + Math.random() * 400);
+      }
+    } finally { if (tab) chrome.tabs.remove(tab.id).catch(() => {}); }
+  };
+  try { await Promise.all(Array.from({length: Math.min(parallel, queries.length)}, worker)); }
+  finally { progress(''); if (shownOnce && appTabId != null) chrome.tabs.update(appTabId, {active: true}).catch(() => {}); }
+  return {ok: results.length > 0 || !blocked, blocked, results, error: blocked ? 'Google pidió una verificación que no se completó.' : ''};
+}
+
 async function preview(url) {
   if (typeof url !== 'string' || !/^https:\/\/(www\.facebook\.com|fb\.watch)\//.test(url)) return {ok: false};
   const r = await fetch(url, {credentials: 'include', cache: 'no-store'});

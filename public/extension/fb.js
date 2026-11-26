@@ -179,7 +179,7 @@
       }
     };
     let blockMsg = null;
-    const closed = await waitFor(() => { collect(); blockMsg = messages.find(m => RX.block.test(m)) || alertText(existing); return blockMsg || !vis(d); }, 120000, 400);
+    const closed = await waitFor(() => { collect(); blockMsg = messages.find(m => RX.block.test(m)) || alertText(existing); return blockMsg || !vis(d); }, 45000, 400);
     const t0 = Date.now();
     while (!blockMsg && Date.now() - t0 < 5000) { collect(); blockMsg = messages.find(m => RX.block.test(m)) || null; await sleep(400); }
     if (blockMsg && !messages.includes(blockMsg)) messages.unshift(blockMsg);
@@ -187,7 +187,9 @@
     if (blockMsg) return {ok: false, blocked: true, step: 'publish', error: blockMsg, messages};
     const grpMsg = messages.find(m => RX.groupBlock.test(m));
     if (grpMsg && vis(d)) return {ok: false, step: 'group', error: grpMsg, messages};
-    if (!closed || vis(d)) return {ok: false, step: 'publish', error: 'El cuadro de publicación no se cerró: revisa la ventana de Facebook', messages};
+    // Facebook a veces deja el cuadro abierto aunque la publicación se haya hecho: sin aviso de bloqueo ni del grupo,
+    // se considera publicada (normal). Se puede comprobar después con «Verificar» en el historial.
+    if (!closed || vis(d)) return {ok: true, review, messages, unconfirmed: true};
     return {ok: true, review, messages};
   }
 

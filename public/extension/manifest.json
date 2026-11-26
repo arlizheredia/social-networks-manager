@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Social Networks Manager · Extensión",
   "short_name": "SNM",
-  "version": "2.1.1",
+  "version": "2.3.5",
   "description": "Publica en tus grupos de Facebook y extrae los comentarios de Facebook, Instagram y TikTok para Social Networks Manager, con tu propia sesión.",
   "minimum_chrome_version": "120",
   "permissions": [
@@ -21,7 +21,8 @@
     "https://*.tiktok.com/*",
     "https://arlizheredia.github.io/*",
     "http://localhost/*",
-    "http://127.0.0.1/*"
+    "http://127.0.0.1/*",
+    "https://www.google.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -61,5 +62,9 @@
       "48": "icon48.png",
       "128": "icon128.png"
     }
-  }
+  },
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ]
 }
