@@ -3,6 +3,7 @@ import { getPub } from './store'
 import { cleanErr, failedItems, reasonOf } from './logic'
 import { fmtRelative } from '@/lib/util'
 import type { Group, HistoryEntry, HistoryItem } from './types'
+import { groupsByTag } from './groups'
 
 export const ymd = (ts: number) => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 export const itemDay = (h: HistoryEntry, i: HistoryItem) => ymd(i.at || h.date)
@@ -70,21 +71,99 @@ export function buildDiffusionReport(date: string, ids: string[], meta: { author
   return L.join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
+/** Publicaciones con actividad entre dos fechas (incluidas). */
+export const entriesIn = (from: string, to: string) => getPub().history.filter((h) => h.items.some((i) => { const d = itemDay(h, i); return d >= from && d <= to }))
+const dmy = (d: string) => { const [y, m, dd] = d.split('-'); return `${dd}-${m}-${y}` }
+export const diffusionRangeFileName = (from: string, to: string) => (from === to ? diffusionFileName(from) : `${DIFFUSION_TITLE}-${dmy(from)}_a_${dmy(to)}`)
+const shortDay = (d: string) => new Date(d + 'T12:00').toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })
+
+/**
+ * Resumen de la difusión en un periodo: totales, actividad por día, detalle por publicación,
+ * grupos más usados e incidencias agrupadas. Con un solo día es el informe diario.
+ */
+export function buildDiffusionRangeReport(from: string, to: string, ids: string[], meta: { author: string; brand: string }) {
+  if (from > to) [from, to] = [to, from]
+  if (from === to) return buildDiffusionReport(from, ids, meta)
+  const inR = (h: HistoryEntry, i: HistoryItem) => { const d = itemDay(h, i); return d >= from && d <= to }
+  const E = getPub().history.filter((h) => ids.includes(h.id)).map((h) => ({ h, its: h.items.filter((i) => inR(h, i)) })).filter((x) => x.its.length)
+    .sort((a, b) => Math.min(...a.its.map((i) => i.at || a.h.date)) - Math.min(...b.its.map((i) => i.at || b.h.date)))
+  const L = [DIFFUSION_TITLE, `Periodo: del ${longDate(from)} al ${longDate(to)}`]
+  if (meta.author) L.push(`Elaborado por: ${meta.author}`)
+  if (meta.brand) L.push(`Cliente / marca: ${meta.brand}`)
+  L.push('', 'Resumen')
+  if (!E.length) { L.push('No hay publicaciones compartidas en este periodo.'); return L.join('\n') }
+  const all = E.flatMap((x) => x.its), is = (f: (i: HistoryItem) => boolean) => all.filter(f)
+  const pub = is((i) => i.status === 'done' && i.review !== 'awaiting' && i.review !== 'rejected'), aw = is((i) => i.review === 'awaiting'), rej = is((i) => i.review === 'rejected')
+  const sk = is((i) => i.status === 'skipped' && !NOT_FAIL.test(i.error || '')), pe = is((i) => i.status === 'pending')
+  const shared = pub.length + aw.length + rej.length, ver = is((i) => !!i.verify?.found).length
+  const days = new Map<string, { posts: Set<string>; groups: number; ok: number }>()
+  E.forEach(({ h, its }) => its.forEach((i) => { const d = itemDay(h, i); const x = days.get(d) || { posts: new Set<string>(), groups: 0, ok: 0 }; x.posts.add(h.id); if (i.status === 'done') { x.groups++; if (i.review !== 'awaiting' && i.review !== 'rejected') x.ok++ } days.set(d, x) }))
+  const groups = new Map<string, { name: string; n: number; ok: number }>()
+  all.filter((i) => i.status === 'done').forEach((i) => { const g = groups.get(i.gid || i.name) || { name: i.name, n: 0, ok: 0 }; g.n++; if (i.review !== 'awaiting' && i.review !== 'rejected') g.ok++; groups.set(i.gid || i.name, g) })
+  const attempted = shared + sk.length
+  const P: string[] = []
+  P.push(`Entre el ${new Date(from + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'long' })} y el ${new Date(to + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })} se ${E.length === 1 ? 'difundió' : 'difundieron'} ${pl(E.length, 'publicación', 'publicaciones')} en ${pl(days.size, 'día', 'días')} de actividad.`)
+  if (shared) {
+    P.push(`En total se compartieron ${pl(shared, 'vez', 'veces')} en ${pl(groups.size, 'grupo distinto', 'grupos distintos')} de Facebook${attempted ? ` (${Math.round((shared / attempted) * 100)} % de los intentos)` : ''}.`)
+    const extra: string[] = []
+    if (pub.length !== shared) extra.push(pub.length ? `${pub.length} ${pub.length === 1 ? 'quedó visible' : 'quedaron visibles'}` : 'ninguna quedó visible')
+    if (aw.length) extra.push(`${aw.length} ${aw.length === 1 ? 'sigue' : 'siguen'} a la espera de aprobación`)
+    if (rej.length) extra.push(`${rej.length} ${rej.length === 1 ? 'fue rechazada' : 'fueron rechazadas'}`)
+    P.push(pub.length === shared ? 'Todas quedaron visibles en sus grupos.' : cap(extra.join(', ')) + '.')
+    if (ver) P.push(`Se comprobó directamente la visibilidad de ${pl(ver, 'publicación', 'publicaciones')} en su grupo.`)
+  } else P.push('Ninguna llegó a publicarse en los grupos.')
+  if (sk.length) P.push(`En ${pl(sk.length, 'ocasión', 'ocasiones')} no fue posible publicar.`)
+  if (pe.length) P.push(`${pe.length === 1 ? 'Queda' : 'Quedan'} ${pl(pe.length, 'grupo', 'grupos')} por completar.`)
+  L.push(P.join(' '), '', 'Actividad por día')
+  ;[...days.entries()].sort((a, b) => a[0].localeCompare(b[0])).forEach(([d, x]) => L.push(`- ${cap(shortDay(d))}: ${pl(x.posts.size, 'publicación', 'publicaciones')} en ${pl(x.groups, 'grupo', 'grupos')}${x.ok !== x.groups ? ` (${x.ok} visibles)` : ''}`))
+  L.push('', 'Detalle por publicación')
+  E.forEach(({ h, its }, k) => {
+    const txt = sharedText(h), ds = [...new Set(its.map((i) => itemDay(h, i)))].sort()
+    L.push(`${k + 1}. ${h.url || 'Publicación sin enlace'}`)
+    if (txt) L.push(`Texto: «${clip(txt, 300)}»`)
+    L.push(`Fecha: ${ds.map((d) => cap(shortDay(d))).join(', ')}`)
+    L.push(`Grupos en los que se compartió: ${its.filter((i) => i.status === 'done').length}`, '')
+  })
+  if (groups.size) {
+    L.push('Grupos más usados')
+    ;[...groups.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name)).slice(0, 10).forEach((g) => L.push(`- «${g.name}»: ${pl(g.n, 'publicación', 'publicaciones')}${g.ok !== g.n ? ` (${g.ok} visibles)` : ''}`))
+    L.push('')
+  }
+  const O: string[] = []
+  const reasons = new Map<string, Set<string>>()
+  sk.filter((i) => i.error).forEach((i) => { const r = reasonOf(i.error); reasons.set(r, (reasons.get(r) || new Set()).add(i.name)) })
+  reasons.forEach((names, r) => O.push(`No se pudo compartir en ${listNames([...names])}: ${r}.`))
+  if (pe.some((i) => i.error)) O.push('Facebook mostró avisos de seguridad en algunos grupos y se detuvo la difusión para proteger la cuenta.')
+  const rejN = [...new Set(rej.map((i) => i.name))]
+  if (rejN.length) O.push(`Rechazada por los administradores de ${listNames(rejN)}.`)
+  if (O.length) { L.push('Observaciones'); O.forEach((o) => L.push('- ' + o)); L.push('') }
+  return L.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 export type GroupScope = 'active' | 'all' | 'sel'
-export function buildGroupsReport(groups: Group[], scope: GroupScope, inc: { link: boolean; tags: boolean; notes: boolean; last: boolean }) {
+export function buildGroupsReport(groups: Group[], scope: GroupScope, inc: { link: boolean; tags: boolean; notes: boolean; last: boolean }, opts: { byTag?: boolean; tag?: string | null } = {}) {
   const list = [...groups].sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }))
   const title = scope === 'active' ? 'Grupos activos de Facebook' : scope === 'all' ? 'Grupos de Facebook' : 'Grupos seleccionados de Facebook'
-  const L = [title, `Fecha: ${cap(new Date().toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}`, `Total: ${pl(list.length, 'grupo', 'grupos')}`, '', 'Listado']
-  list.forEach((g, i) => {
+  const L = [title + (opts.tag ? ` · ${opts.tag}` : ''), `Fecha: ${cap(new Date().toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}`, `Total: ${pl(list.length, 'grupo', 'grupos')}`]
+  const one = (g: Group, i: number, showTags: boolean) => {
     L.push(`${i + 1}. ${g.name}`)
     if (inc.link) L.push(`Enlace: ${g.url}`)
-    if (inc.tags && g.tags.length) L.push(`Etiquetas: ${g.tags.join(', ')}`)
+    if (showTags && inc.tags && g.tags.length) L.push(`Etiqueta: ${g.tags[0]}`)
     if (inc.notes && g.notes) L.push(`Notas: ${g.notes}`)
     if (inc.last) L.push(`Último uso: ${g.lastShared ? fmtRelative(g.lastShared) : 'nunca'}`)
     if (scope !== 'active') L.push(`Estado: ${g.active ? 'activo' : 'inactivo'}`)
     L.push('')
-  })
-  return L.join('\n').trim()
+  }
+  if (opts.byTag) {
+    // una sección por etiqueta (p. ej. por provincia); la etiqueta ya va en el título de la sección
+    const secs = groupsByTag(list, opts.tag)
+    L.push(`Por etiqueta: ${secs.map((x) => `${x.tag} (${x.items.length})`).join(', ')}`, '')
+    secs.forEach(({ tag, items }) => {
+      L.push(`${tag} · ${pl(items.length, 'grupo', 'grupos')}`)
+      items.forEach((g, i) => one(g, i, false))
+    })
+  } else { L.push('', 'Listado'); list.forEach((g, i) => one(g, i, true)) }
+  return L.join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
 export { failedItems }

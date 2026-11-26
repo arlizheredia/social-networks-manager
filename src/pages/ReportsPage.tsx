@@ -13,7 +13,7 @@ import { setPrefs, usePrefs } from '@/features/comments/prefs'
 import { countTxt, inHistory, trackProgress, trackWhen, useTR } from '@/features/comments/tracking'
 import { useExplore } from '@/features/comments/explore'
 import { usePublisher } from '@/features/publisher/store'
-import { buildDiffusionReport, diffusionFileName, entriesOn, ymd } from '@/features/publisher/report'
+import { buildDiffusionRangeReport, diffusionRangeFileName, entriesIn, ymd } from '@/features/publisher/report'
 import { entryTitle } from '@/features/publisher/logic'
 
 function WhatsAppDialog({ m, open, onClose }: { m: ReportModel; open: boolean; onClose: () => void }) {
@@ -65,7 +65,7 @@ function CommentsReport() {
   useEffect(() => {
     const t = params.get('t')
     const valid = (prefs.repSel || []).filter((id) => done.some((x) => x.id === id))
-    setSel(new Set(t ? [t] : valid))
+    setSel(new Set(t ? t.split(',').filter((id) => done.some((x) => x.id === id)) : valid))
   }, [params, tracks.length]) // eslint-disable-line react-hooks/exhaustive-deps
   const preset = (days: number | 'all' | 'none') => setSel(new Set(days === 'none' ? [] : done.filter((t) => days === 'all' || new Date(t.date + 'T12:00').getTime() > Date.now() - days * 864e5).map((t) => t.id)))
   const gen = async () => {
@@ -142,27 +142,32 @@ function CommentsReport() {
 
 function DiffusionReport() {
   const state = usePublisher()
-  const [date, setDate] = useState(ymd(Date.now()))
+  const [params] = useSearchParams()
+  // periodo: con el mismo día en «Desde» y «Hasta» es el informe diario
+  const [from, setFrom] = useState(params.get('desde') || ymd(Date.now()))
+  const [to, setTo] = useState(params.get('hasta') || params.get('desde') || ymd(Date.now()))
+  const lo = from <= to ? from : to, hi = from <= to ? to : from
   // Preferencias globales de informes (Ajustes › Informes): las mismas para comentarios y difusión
   const rep = usePrefs((p) => p.report)
   const meta = { author: rep.author, brand: rep.client }
   const setMeta = (m: { author: string; brand: string }) => setPrefs({ report: { ...rep, author: m.author, client: m.brand } })
-  const entries = entriesOn(date)
+  const entries = entriesIn(lo, hi)
   const [ids, setIds] = useState<Set<string>>(new Set())
   const [text, setText] = useState('')
   const [dirty, setDirty] = useState(false)
-  useEffect(() => { setIds(new Set(entriesOn(date).map((h) => h.id))) }, [date, state.history.length])
-  const regen = () => { setText(buildDiffusionReport(date, [...ids], meta)); setDirty(false) }
-  useEffect(() => { if (!dirty) regen() }, [ids, rep.author, rep.client, date]) // eslint-disable-line react-hooks/exhaustive-deps
-  const file = diffusionFileName(date)
+  useEffect(() => { setIds(new Set(entriesIn(lo, hi).map((h) => h.id))) }, [lo, hi, state.history.length])
+  const regen = () => { setText(buildDiffusionRangeReport(lo, hi, [...ids], meta)); setDirty(false) }
+  useEffect(() => { if (!dirty) regen() }, [ids, rep.author, rep.client, lo, hi]) // eslint-disable-line react-hooks/exhaustive-deps
+  const file = diffusionRangeFileName(lo, hi)
   // el texto ocupa el alto disponible: los botones quedan a 40 px del final de la ventana
   const areaRef = useRef<HTMLTextAreaElement>(null), actionsRef = useRef<HTMLDivElement>(null)
   useFitHeight(areaRef, actionsRef, { margin: 40, deps: [entries.length] })
   const title = file
   return (
     <Card>
-      <div className="grid gap-x-4 sm:grid-cols-3">
-        <Field label="Fecha"><Input type="date" max={ymd(Date.now())} value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+      <div className="grid gap-x-4 sm:grid-cols-4">
+        <Field label="Desde"><Input type="date" max={ymd(Date.now())} value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value) }} /></Field>
+        <Field label="Hasta"><Input type="date" max={ymd(Date.now())} value={to} onChange={(e) => { setTo(e.target.value); if (e.target.value < from) setFrom(e.target.value) }} /></Field>
         <Field label="Elaborado por"><Input maxLength={80} placeholder="Tu nombre" value={meta.author} onChange={(e) => setMeta({ ...meta, author: e.target.value })} /></Field>
         <Field label="Cliente o marca"><Input maxLength={80} placeholder="Opcional" value={meta.brand} onChange={(e) => setMeta({ ...meta, brand: e.target.value })} /></Field>
       </div>
@@ -171,7 +176,7 @@ function DiffusionReport() {
         <div className="mb-4 space-y-1">{entries.map((h) => (
           <label key={h.id} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={ids.has(h.id)} onChange={(e) => { const s = new Set(ids); e.target.checked ? s.add(h.id) : s.delete(h.id); setIds(s) }} /><span className="truncate">{entryTitle(h).slice(0, 90)}</span></label>
         ))}</div>
-      ) : <p className="mb-4 text-text-2">No hay publicaciones en esa fecha.</p>}
+      ) : <p className="mb-4 text-text-2">No hay publicaciones {lo === hi ? 'en esa fecha' : 'en ese periodo'}.</p>}
       <Field label="Texto del informe · puedes editarlo antes de copiarlo o exportarlo"><Textarea ref={areaRef} className="min-h-40 font-mono text-xs" value={text} onChange={(e) => { setText(e.target.value); setDirty(true) }} /></Field>
       <div ref={actionsRef} className="flex flex-wrap gap-2">
         <Button variant="text" icon="refresh" onClick={async () => { if (!dirty || (await confirmBox('¿Regenerar el informe?', 'Se perderán los cambios que hayas hecho en el texto.', 'Regenerar'))) regen() }}>Regenerar</Button>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ymd } from '@/features/publisher/report'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Banner, Button, Card, Dialog, Empty, Icon, IconButton, Input, PageHead, Tabs, Textarea, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
@@ -101,12 +102,18 @@ function PublishHistory() {
   const nav = useNavigate()
   const [vf, setVf] = useState<{ hid: string; idx: number } | null>(null)
   const aw = awaitingItems(history)
+  const [from, setFrom] = useState(ymd(Date.now() - 6 * 864e5))
+  const [to, setTo] = useState(ymd(Date.now()))
   if (!history.length) return <Card><Empty icon={<Icon name="history" />} title="Aún no hay actividad">Cuando publiques en tus grupos aparecerá aquí, con el estado de cada grupo.<div className="mt-3"><Button icon="send" onClick={() => nav('/publicar')}>Ir a Publicar</Button></div></Empty></Card>
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outlined" icon="summarize" onClick={() => nav('/informes?tipo=difusion')}>Informe diario</Button>
-        <Button variant="text" icon="delete_sweep" onClick={async () => { if (await confirmBox('¿Borrar todo el historial de publicaciones?', 'Esta acción no afecta a lo publicado en Facebook ni a tus grupos.', 'Borrar', true)) { setPub({ history: [], runId: null }); toast('Historial borrado') } }}>Borrar historial</Button>
+      <div className="flex flex-wrap items-end gap-2">
+        <Button icon="today" className="self-end" onClick={() => { const d = ymd(Date.now()); nav(`/informes?tipo=difusion&desde=${d}&hasta=${d}`) }}>Informe diario</Button>
+        <label className="text-xs text-text-2">Desde<Input type="date" className="!h-10" max={ymd(Date.now())} value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value) }} /></label>
+        <label className="text-xs text-text-2">Hasta<Input type="date" className="!h-10" max={ymd(Date.now())} value={to} onChange={(e) => { setTo(e.target.value); if (e.target.value < from) setFrom(e.target.value) }} /></label>
+        <Button variant="outlined" icon="summarize" className="self-end" onClick={() => nav(`/informes?tipo=difusion&desde=${from}&hasta=${to}`)}>{from === to ? 'Informe del día' : 'Informe del periodo'}</Button>
+        <span className="flex-1" />
+        <Button variant="text" icon="delete_sweep" className="self-end" onClick={async () => { if (await confirmBox('¿Borrar todo el historial de publicaciones?', 'Esta acción no afecta a lo publicado en Facebook ni a tus grupos.', 'Borrar', true)) { setPub({ history: [], runId: null }); toast('Historial borrado') } }}>Borrar historial</Button>
       </div>
       {!!aw.length && (
         <Card filled>
@@ -153,10 +160,19 @@ function TrackingHistory() {
         <span className="flex-1" />
         {ids.length > 0 && <>
           <Button variant="outlined" icon="forum" onClick={async () => { if (await openTrackingComments(ids)) nav('/comentarios/explorar') }}>Ver comentarios ({ids.length})</Button>
-          <Button icon="summarize" onClick={() => nav(`/informes?t=${ids[0]}`)}>Crear informe</Button>
+          <Button icon="summarize" onClick={() => nav(`/informes?t=${ids.join(',')}`)}>Crear informe ({ids.length})</Button>
           <Button variant="text" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar seguimientos?', `Se eliminarán ${ids.length} seguimiento(s) y sus resultados.`, 'Eliminar', true)) { for (const id of ids) await deleteTracking(id); setSel(new Set()) } }}>Eliminar</Button>
         </>}
       </div>
+      {list.length > 0 && (
+        // misma sangría que las casillas de la lista (borde de 1 px + 16 px de margen)
+        <label className="flex items-center gap-3 pl-[17px] text-sm text-text-2">
+          <input type="checkbox" className="size-4 accent-[var(--primary)]" aria-label="Seleccionar todos" checked={list.every((t) => sel.has(t.id))}
+            ref={(el) => { if (el) el.indeterminate = ids.length > 0 && ids.length < list.length }}
+            onChange={(e) => setSel(e.target.checked ? new Set(list.map((t) => t.id)) : new Set())} />
+          {ids.length ? `${ids.length} de ${list.length} seleccionado${ids.length === 1 ? '' : 's'}` : 'Seleccionar todos'}
+        </label>
+      )}
       <div className="divide-y divide-outline-2 rounded-3xl border border-outline-2 bg-surface">
         {list.map((t) => { const pr = trackProgress(t); return (
           <div key={t.id} id={'seg-' + t.id} className={cn('flex flex-wrap items-center gap-3 px-4 py-3 transition-colors', focus === t.id && 'bg-primary-container/50 first:rounded-t-3xl last:rounded-b-3xl')}>
