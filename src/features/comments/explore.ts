@@ -137,7 +137,7 @@ export async function runSearch() {
       const list = s.comments.filter((c) => c.text?.trim()).slice(0, 600)
       if (s.comments.length > 600) toast('Se clasificarán los primeros 600 comentarios')
       const ok = new Set<string>()
-      await withTask('Clasificando con la IA', async (p) => {
+      await withTask('Clasificando comentarios', async (p) => {
         for (let i = 0; i < list.length; i += 25) {
           p(i / list.length)
           const batch = list.slice(i, i + 25)

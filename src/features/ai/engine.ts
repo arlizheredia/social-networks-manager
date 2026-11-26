@@ -11,6 +11,12 @@ import { createStore, getMany, setMany } from 'idb-keyval'
 export const AI_LIB = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1'
 export const LLM_MODEL = 'onnx-community/Qwen2.5-0.5B-Instruct'
 export const SEM_MODEL = 'Xenova/multilingual-e5-small'
+/** Los dos modelos de la IA de la app, con su función y tamaño aproximado (para mostrarlos al usuario). */
+export const AI_MODELS = [
+  { id: SEM_MODEL, name: 'multilingual-e5-small', role: 'Búsqueda por significado', mb: 120 },
+  { id: LLM_MODEL, name: 'Qwen2.5-0.5B-Instruct', role: 'Redacción', mb: 510 },
+] as const
+const modelLabel = (id: string) => { const m = AI_MODELS.find((x) => x.id === id); return m ? `${m.name} (${m.role.toLowerCase()})` : id }
 const CACHE = 'transformers-cache'
 const HF_BASE = 'https://huggingface.co/'
 const hfUrl = (model: string, file: string) => HF_BASE + model + '/resolve/main/' + file
@@ -140,10 +146,10 @@ export async function installFromInternet() {
     try { await navigator.storage?.persist?.() } catch { /* */ }
     const total = AI_SIZE.sem + AI_SIZE.llm
     const upd = (done: number) => setAI({ pct: Math.min(99, Math.floor((done / total) * 100)), mb: [done / 1e6, total / 1e6] })
-    setAI({ step: 'Descargando el modelo de búsqueda' })
+    setAI({ step: `Descargando ${modelLabel(SEM_MODEL)}` })
     await run({ type: 'load', kind: 'sem', model: SEM_MODEL, task: 'feature-extraction', tries: semTries() }, { onProgress: progressAgg((a, b) => upd((a / b) * AI_SIZE.sem)) })
     loaded.sem = true
-    setAI({ step: 'Descargando el modelo de lenguaje' })
+    setAI({ step: `Descargando ${modelLabel(LLM_MODEL)}` })
     await run({ type: 'load', kind: 'llm', model: LLM_MODEL, task: 'text-generation', tries: await llmTries() }, { onProgress: progressAgg((a, b) => upd(AI_SIZE.sem + (a / b) * AI_SIZE.llm)) })
     loaded.llm = true; loaded.sem = false
     await scanCache()
@@ -198,7 +204,7 @@ export async function installFromFile(file: File) {
     for (const f of files) {
       const e = ents.find((x) => x.name === f.path)
       if (!e || e.method !== 0 || (f.size != null && e.size !== f.size)) throw new Error('El paquete de IA está incompleto o dañado (' + f.path + ').')
-      setAI({ step: f.model === LLM_MODEL ? 'Copiando el modelo de lenguaje' : 'Copiando el modelo de búsqueda' })
+      setAI({ step: `Copiando ${modelLabel(f.model)}` })
       await cache.put(hfUrl(f.model, f.file), new Response(file.slice(e.start, e.start + e.size), {
         headers: { 'content-type': /\.json$/.test(f.file) ? 'application/json' : 'application/octet-stream', 'content-length': String(e.size) },
       }))
@@ -249,7 +255,7 @@ export async function installFromFolder(files: File[]) {
     const cache = await caches.open(CACHE), total = list.reduce((a, x) => a + x.blob.size, 0)
     let done = 0
     for (const x of list) {
-      setAI({ step: x.model === LLM_MODEL ? 'Copiando el modelo de lenguaje' : 'Copiando el modelo de búsqueda' })
+      setAI({ step: `Copiando ${modelLabel(x.model)}` })
       await cache.put(hfUrl(x.model, x.file), new Response(x.blob, {
         headers: { 'content-type': /\.json$/.test(x.file) ? 'application/json' : 'application/octet-stream', 'content-length': String(x.blob.size) },
       }))

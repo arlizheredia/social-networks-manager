@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Banner, Button, Dialog, Icon, toast, confirmBox } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { download } from '@/lib/util'
-import { AI_PACK, exportPack, installFromFile, installFromFolder, installFromInternet, uninstall, useAI } from './engine'
+import { AI_MODELS, AI_PACK, exportPack, installFromFile, installFromFolder, installFromInternet, uninstall, useAI } from './engine'
 
 /** Panel único de la IA de la app: instalar (Internet o archivo), exportar paquete y desinstalar. */
 export function AIPanel() {
@@ -41,6 +41,16 @@ export function AIPanel() {
         Una sola IA para toda la app: busca comentarios por significado, prepara informes, sugiere respuestas, redacta el mensaje para WhatsApp y mejora el texto de tus publicaciones.
         Es <b className="font-medium text-text">gratuita, funciona sin conexión</b> y nada sale de tu navegador. Se instala una vez (≈ 620 MB).
       </p>
+      {/* qué modelos componen la IA */}
+      <div className="divide-y divide-outline-2 overflow-hidden rounded-2xl border border-outline-2 text-sm">
+        {AI_MODELS.map((m) => (
+          <div key={m.id} className="flex items-center gap-3 px-4 py-2.5">
+            <Icon name={m.role === 'Redacción' ? 'edit_note' : 'manage_search'} className="text-primary" />
+            <div className="min-w-0 flex-1"><div className="font-medium">{m.name}</div><div className="text-xs text-text-2">{m.role} · <a href={`https://huggingface.co/${m.id}`} target="_blank" rel="noopener">{m.id}</a></div></div>
+            <span className="text-xs text-text-2">≈ {m.mb} MB</span>
+          </div>
+        ))}
+      </div>
       {installed && !busy ? (
         <Banner tone="ok" icon="auto_awesome"><b>La IA está instalada</b> en este navegador y lista para usar.</Banner>
       ) : busy ? (
