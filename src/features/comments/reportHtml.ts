@@ -2,6 +2,7 @@ import { esc } from '@/lib/util'
 import { platName } from './text'
 import type { ReportModel } from './report'
 import type { Comment } from './types'
+import { ASPECTS } from './aspects'
 
 const n = (x: number) => (x ?? 0).toLocaleString('es')
 /** Publicación o reel del comentario, como referencia (con enlace si se conoce). */
@@ -40,8 +41,23 @@ export function reportHtml(m: ReportModel) {
   H.push('<h2>Indicadores</h2><table><thead><tr><th>Indicador</th><th>Actual</th>' + (m.prev ? `<th>Anterior</th><th>Cambio</th>` : '') + '</tr></thead><tbody>' +
     m.cmp.map((r) => `<tr><td>${esc(r.k)}</td><td><b>${r.a == null ? '—' : n(r.a)}</b></td>${m.prev ? `<td>${r.b == null ? '—' : n(r.b)}</td><td class="${r.tone === 'up' ? 'pos' : r.tone === 'down' ? 'neg' : ''}">${esc(r.D)}</td>` : ''}</tr>`).join('') + '</tbody></table>')
   if (m.prev) H.push(`<p class="muted">Actual: el seguimiento más reciente${m.tracks.length ? ` («${esc(m.tracks[m.tracks.length - 1].name)}»)` : ''}. Comparado con ${esc(m.prevName)}.</p>`)
+  // evaluación de la marca por aspecto (solo los aspectos de los que se habla)
+  const VERD = { fortaleza: ['+', 'Fortaleza', 'pos'], mixto: ['·', 'A mejorar', ''], debil: ['−', 'Punto débil', 'neg'] } as const
+  if (m.aspects.brand.length) {
+    H.push(`<h2>Evaluación de ${esc(m.brand)} por aspecto</h2>` +
+      '<table><thead><tr><th>Aspecto</th><th>Menciones</th><th>Positivas</th><th>Negativas</th><th>Valoración</th></tr></thead><tbody>' +
+      m.aspects.brand.map((a) => `<tr><td>${esc(a.name)}</td><td>${n(a.n)}</td><td class="pos">${n(a.pos)}</td><td class="neg">${n(a.neg)}</td><td class="${VERD[a.verdict][2]}"><b>${VERD[a.verdict][0]}</b> ${VERD[a.verdict][1]}</td></tr>`).join('') + '</tbody></table>')
+    m.aspects.brand.filter((a) => a.negEx.length || a.posEx.length).forEach((a) => {
+      H.push(`<h3>${esc(a.name)}</h3>` + [...a.negEx.slice(0, 2), ...a.posEx.slice(0, 1)].map((c) => quote(c)).join(''))
+    })
+    const missing = ASPECTS.filter((d) => !m.aspects.brand.some((a) => a.key === d.key)).map((d) => d.short)
+    if (missing.length) H.push(`<p class="muted">Sin comentarios sobre ${esc(missing.join(', '))} en este periodo.</p>`)
+  }
   // comparaciones con la competencia: punto crítico, justo después de los indicadores
-  if (m.rivals.length) H.push('<h2>Comparaciones con la competencia</h2>' + m.rivals.map((r) =>
+  if (m.rivals.length) H.push('<h2>Comparaciones con la competencia</h2>' +
+    (m.aspects.rivals.length ? '<table><thead><tr><th>Aspecto</th><th>A favor de la competencia</th><th>En contra de la competencia</th><th>Competidores</th></tr></thead><tbody>' +
+      m.aspects.rivals.map((r) => `<tr><td>${esc(r.name)}</td><td class="neg">${n(r.favor)}</td><td class="pos">${n(r.against)}</td><td>${esc(r.rivals.join(', ') || '—')}</td></tr>`).join('') + '</tbody></table>' : '') +
+    m.rivals.map((r) =>
     `<h3>${esc(r.name)} — ${n(r.n)} ${r.n === 1 ? 'comentario' : 'comentarios'}</h3>` + r.samples.slice(0, 2).map((c) => quote(c)).join('')).join('') +
     '<p class="muted">Detectado por nombres propios y comparaciones al hablar de compras; revísalo antes de actuar.</p>')
   if (m.evolution.length > 1) {

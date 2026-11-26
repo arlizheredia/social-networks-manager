@@ -87,6 +87,7 @@ const POS_STEMS = ['recomend', 'agradec', 'excelen', 'encant', 'maravill', 'fant
 const ADVERSATIVE = new Set(['pero', 'aunque', 'sin embargo', 'embargo', 'but', 'however'])
 const NEGATORS = new Set(['no', 'nunca', 'ni', 'jamás', 'jamas', 'not', 'never', 'sin'])
 
+const NEG_PHRASE = /(^|[^\p{L}])((todavia|aun|ya) no (me |nos |le )?(ha |han )?(llega|llegan|llego|llegaron|llegado|entregan|entregaron|responden|contestan)|no (me |nos )?(ha|han) (llegado|entregado|respondido|contestado)|nunca (me )?(llego|llegaron|respondieron|contestaron)|sigo esperando|seguimos esperando|no (me |nos )?(responden|contestan|atienden)|nadie (me )?(responde|contesta|atiende)|no (puedo|pude) (pagar|comprar|entrar)|me cobraron (dos|2) veces)(?=$|[^\p{L}])/u
 export const norm = (w: string) => w.normalize('NFD').replace(/[̀-ͯ]/g, '')
 export const normL = (s: unknown) => norm(String(s || '').replace(/\s+/g, ' ').trim().toLowerCase())
 export const EMOJI_RE = /\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*/gu
@@ -156,6 +157,8 @@ export function sentiment(text: string): { score: number; label: Sentiment } {
     const v = neg ? -pol : pol
     score += (v < 0 ? -1.5 : 1) * boost
   })
+  // quejas que no llevan palabras negativas: «todavía no me llega», «sigo esperando», «no responden»
+  if (NEG_PHRASE.test(normL(text))) score -= 1.5
   score = Math.round(score * 2) / 2
   POS_E.forEach((e) => { if (text.includes(e)) score += 1 })
   NEG_E.forEach((e) => { if (text.includes(e)) score -= 1 })

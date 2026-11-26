@@ -5,6 +5,8 @@ import { getPrefs } from './prefs'
 import { trackWhen, useTR } from './tracking'
 import { computeStats, computeTeam, detectRivals, fkey, focusFilter, focusMatch, focusName, focusSubj, reportOpinions, sentOf, type Stats } from './analysis'
 import type { Comment, Platform, RawComment } from './types'
+import { ASPECTS, evaluateAspects, type AspectEval } from './aspects'
+const ASPECT_ADVICE = Object.fromEntries(ASPECTS.map((a) => [a.key, a.advice])) as Record<string, string>
 import type { Tracking } from './db'
 
 const fmtN = (n: number) => (n ?? 0).toLocaleString('es')
@@ -39,6 +41,10 @@ export interface ReportModel {
   critics: [string, number][]
   opinions: ReturnType<typeof reportOpinions>
   rivals: ReturnType<typeof detectRivals>
+  /** Evaluación de la marca por aspecto (servicio, entregas, precio, variedad, búsqueda y pago) y de la competencia en esos aspectos. */
+  aspects: AspectEval
+  /** Nombre de la marca evaluada. */
+  brand: string
   highlightsPos: Comment[]
   highlightsNeg: Comment[]
   questions: Comment[]
@@ -161,6 +167,11 @@ export async function buildReport(opts: { tids?: string[]; comments?: Comment[];
   list.forEach((c) => { const k = c._ref?.postId || 'x'; byPost.set(k, [...(byPost.get(k) || []), c]) })
   const posts = [...byPost].map(([id, items]) => { const s = sentOf(items); return { id, label: items[0]._post || title, url: items[0]._postUrl || '', platform: items[0].platform, total: items.length, pos: s.pos, neg: s.neg, negPct: pct(s.neg, s.total) } }).sort((a, b) => b.total - a.total)
   const pos = nonTeam.filter((c) => c.sentiment === 'positivo'), neg = nonTeam.filter((c) => c.sentiment === 'negativo')
+  // competencia: en todos los comentarios del seguimiento base (una comparación puede no nombrar la marca)
+  const rivals = detectRivals(all)
+  const rivalNames = new Map<string, string[]>()
+  rivals.forEach((r) => r.ids.forEach((id) => rivalNames.set(id, [...(rivalNames.get(id) || []), r.name])))
+  const aspects = evaluateAspects(list, all.filter((c) => rivalNames.has(c.id)), (c) => rivalNames.get(c.id) || [])
   const byReact = (a: Comment, b: Comment) => (b.reactions || 0) - (a.reactions || 0) || (b.text || '').length - (a.text || '').length
   const m: ReportModel = {
     title, focus, author: opts.author, client: opts.client, terms: opts.terms, generatedAt: new Date().toISOString(),
@@ -170,7 +181,7 @@ export async function buildReport(opts: { tids?: string[]; comments?: Comment[];
     pending: nonTeam.filter((c) => c.needsTeam).length, answered: nonTeam.filter((c) => c.teamAnswered).length,
     posts, evolution,
     topAuthors: cur.st.authors.filter((a) => !list.find((c) => c.authorName === a.name)?.isTeam).slice(0, 8).map((a) => ({ name: a.name, count: a.count })),
-    fans: topBy(pos, 5), critics: topBy(neg, 5), opinions: reportOpinions(list), rivals: detectRivals(list),
+    fans: topBy(pos, 5), critics: topBy(neg, 5), opinions: reportOpinions(list), rivals, aspects, brand: opts.client || focus?.name || opts.terms[0] || 'la marca',
     highlightsPos: [...pos].sort(byReact).slice(0, 5), highlightsNeg: [...neg].sort(byReact).slice(0, 5),
     questions: nonTeam.filter((c) => c.isQuestion && (teamOn ? c.needsTeam : !c.repliesCount)).slice(0, 10),
     summary: [], conclusions: [], recommendations: [],
@@ -190,6 +201,12 @@ function writeTexts(m: ReportModel) {
     const d = c.list.length - m.prev.list.length
     S.push(`Frente a ${m.prevName}, hay ${d === 0 ? 'los mismos comentarios' : d > 0 ? `${fmtN(d)} comentarios más` : `${fmtN(-d)} comentarios menos`}${ab}; antes había ${fmtN(m.prev.s.pos)} positivos y ${fmtN(m.prev.s.neg)} negativos.`)
   }
+  const A = m.aspects.brand
+  if (A.length) {
+    const best = [...A].filter((a) => a.verdict === 'fortaleza').sort((a, b) => b.pos - a.pos)[0]
+    const worst = [...A].filter((a) => a.verdict === 'debil').sort((a, b) => b.neg - a.neg)[0]
+    S.push(`Por aspectos, se habla sobre todo de ${A.slice(0, 3).map((a) => a.short).join(', ')}${best ? `; lo mejor valorado es ${best.short}` : ''}${worst ? `${best ? ' y' : ';'} el principal punto débil, ${worst.short}` : ''}.`)
+  }
   if (c.st.q) S.push(`Hay ${countTxt(c.st.q, 'pregunta', 'preguntas')}${m.teamOn ? `, y ${countTxt(m.pending, 'comentario sigue', 'comentarios siguen')} sin respuesta del equipo` : ''}.`)
   m.summary = S
 
@@ -200,13 +217,20 @@ function writeTexts(m: ReportModel) {
       : `La conversación${ab} está equilibrada entre comentarios positivos y negativos.`)
   if (m.critics.length) C.push(`Quienes más critican son ${m.critics.slice(0, 3).map(([a, n]) => `${a} (${n})`).join(', ')}.`)
   if (m.fans.length) C.push(`Quienes más hablan a favor son ${m.fans.slice(0, 3).map(([a, n]) => `${a} (${n})`).join(', ')}.`)
+  A.filter((a) => a.verdict === 'debil').forEach((a) => C.push(`${a.name}: ${countTxt(a.neg, 'comentario negativo', 'comentarios negativos')} frente a ${countTxt(a.pos, 'positivo', 'positivos')}; es un punto débil de ${m.brand}.`))
+  A.filter((a) => a.verdict === 'fortaleza').forEach((a) => C.push(`${a.name}: es una fortaleza de ${m.brand} (${countTxt(a.pos, 'comentario positivo', 'comentarios positivos')}${a.neg ? ` y ${fmtN(a.neg)} negativo${a.neg === 1 ? '' : 's'}` : ''}).`))
+  const rvFav = m.aspects.rivals.filter((r) => r.favor > 0)
+  if (rvFav.length) C.push(`La competencia${rvFav[0].rivals.length ? ` (${rvFav[0].rivals.join(', ')})` : ''} se valora mejor en ${rvFav.map((r) => r.short).join(', ')}.`)
   if (m.rivals.length) { const nR = m.rivals.reduce((a, r) => a + r.n, 0); C.push(`Hay ${countTxt(nR, 'comentario que compara', 'comentarios que comparan')} con la competencia (${m.rivals.slice(0, 3).map((r) => r.name).join(', ')}): es un punto crítico a atender.`) }
   if (m.prev) { const r = m.cmp.find((x) => x.k === 'Negativos'); if (r && r.tone) C.push(r.tone === 'up' ? 'Los comentarios negativos bajaron respecto al seguimiento anterior.' : 'Los comentarios negativos aumentaron respecto al seguimiento anterior.') }
   m.conclusions = C
 
   const R: string[] = []
   if (m.fans.length) R.push('Agradecer y reconocer a quienes más comentan a favor: son posibles embajadores de la marca.')
-  if (m.rivals.length) R.push('Analizar las comparaciones con la competencia (precio, rapidez, calidad, atención) y responder a quienes las hacen.')
+  A.filter((a) => a.verdict === 'debil').slice(0, 3).forEach((a) => R.push(`${a.name}: ${a.advice}`))
+  const lc = (t: string) => t.charAt(0).toLowerCase() + t.slice(1)
+  rvFav.slice(0, 2).forEach((r) => { if (!A.some((a) => a.key === r.key && a.verdict === 'debil')) R.push(`${r.name}: la competencia se compara a su favor; conviene ${lc(ASPECT_ADVICE[r.key] || '')}`) })
+  if (m.rivals.length && !rvFav.length) R.push('Analizar las comparaciones con la competencia y responder a quienes las hacen.')
   if (!R.length) R.push('Mantener el seguimiento periódico de los comentarios.')
   m.recommendations = R
 }
@@ -232,9 +256,16 @@ export function whatsappMessage(m: ReportModel, tone: 'cercano' | 'formal' | 'br
   if (m.focus) L.push(`Se revisaron *${countTxt(m.focus.total, 'comentario', 'comentarios')}*.`)
   else L.push(`Se analizaron *${countTxt(c.list.length, 'comentario', 'comentarios')}* de ${countTxt(c.authorsN, 'persona', 'personas')}${vsPrev}.`)
   if (others.length) L.push(`${crit ? `Sobre *${crit}* hay ${others.length === 1 ? '1 comentario' : `${others.length} comentarios`}${m.focus ? vsPrev : ''}` : 'De ellos'}: *${pos.length} ${pos.length === 1 ? 'positivo' : 'positivos'}* 👍 y *${neg.length} ${neg.length === 1 ? 'negativo' : 'negativos'}* 👎${others.length - pos.length - neg.length ? ' (el resto, neutrales)' : ''}.`)
+  const AS = m.aspects.brand
+  if (AS.length) {
+    if (tone === 'breve') { const w = AS.filter((a) => a.verdict === 'debil'); if (w.length) L.push('', `📌 A mejorar: ${w.map((a) => a.short).join(', ')}.`) }
+    else { L.push('', `📌 *${formal ? 'Evaluación por aspectos' : 'Por aspectos'}*:`); AS.forEach((a) => L.push(`• ${a.name}: ${a.pos} 👍 · ${a.neg} 👎${a.verdict === 'debil' ? ' ⚠️' : ''}`)) }
+  }
   if (m.rivals.length) {
     const rv = m.rivals.slice(0, 3)
     L.push('', `⚠️ *${formal ? 'Se registraron comparaciones con la competencia' : 'Comparan con la competencia'}*: ${people(rv.map((r) => `${r.name} (${r.n})`))}.${tone !== 'breve' ? ' Por ejemplo:' : ''}`)
+    const fav = m.aspects.rivals.filter((r) => r.favor > 0)
+    if (fav.length) L.push(`${formal ? 'Se los valora mejor en' : 'Los valoran mejor en'}: ${fav.map((r) => r.short).join(', ')}.`)
     if (tone !== 'breve') { const seenR = new Set<string>(); rv.flatMap((r) => r.samples).filter((x) => x.text && !seenR.has(x.id) && !!seenR.add(x.id)).slice(0, 2).forEach((x) => L.push(`• «${clip(x.text)}» — ${x.authorName}`)) }
   }
   if (tone !== 'breve') {
