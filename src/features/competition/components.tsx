@@ -268,7 +268,8 @@ export function CompetitorsTab({ brand }: { brand: string }) {
         </Card>
       )}
       <Card>
-        <CardHead title="Competidores detectados" sub="La IA los detecta en los comentarios de tus seguimientos y en Internet (Google) al generar cada informe, y rellena su ficha. Puedes corregir cualquier dato; lo corregido no se sobrescribe." actions={<WebResearch compact />} />
+        <div className="mb-4"><WebResearch compact /></div>
+        <CardHead title="Competidores detectados" sub="La IA los detecta en los comentarios de tus seguimientos y en Internet (Google) al generar cada informe, y rellena su ficha. Puedes corregir cualquier dato; lo corregido no se sobrescribe." />
         {!comps.length ? <Empty icon={<Icon name="travel_explore" />} title="Aún no hay competidores detectados">Genera un informe de competencia: la IA buscará a la competencia en tus seguimientos de comentarios. Para analizar a un competidor a fondo, añade sus publicaciones de Facebook a un seguimiento.</Empty> : (
           <div className="divide-y divide-outline-2 overflow-hidden rounded-2xl border border-outline-2">
             {sorted.map((c) => (
