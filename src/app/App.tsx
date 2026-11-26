@@ -14,6 +14,7 @@ const Groups = lazy(() => import('@/pages/GroupsPage'))
 const Comments = lazy(() => import('@/pages/CommentsPage'))
 const Reports = lazy(() => import('@/pages/ReportsPage'))
 const History = lazy(() => import('@/pages/HistoryPage'))
+const Competition = lazy(() => import('@/pages/CompetitionPage'))
 const Help = lazy(() => import('@/pages/HelpPage'))
 
 
@@ -35,6 +36,7 @@ export function App() {
             <Route path="grupos" element={<Groups />} />
             <Route path="comentarios/*" element={<Comments />} />
             <Route path="informes" element={<Reports />} />
+            <Route path="competencia" element={<Competition />} />
             <Route path="historial" element={<History />} />
             <Route path="ayuda/:article?" element={<Help />} />
             <Route path="*" element={<Navigate to="/" replace />} />

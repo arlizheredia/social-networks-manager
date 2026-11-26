@@ -48,17 +48,32 @@ function TooltipBox({ tip }: { tip: Tip | null }) {
   )
 }
 
-/** Tabla de datos del gráfico (accesible y sin depender del color ni del ratón). */
-export function DataTable({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
+/** ¿Columna de cifras? (números, precios, pesos, porcentajes, horas…): se alinea a la derecha, título incluido. */
+const NUMERIC = /^[-+−]?[\d.,\s]+(\s?(%|usd|eur|mlc|lb|kg|h|d[ií]as?|usd\/lb|de \d+|puntos))?$/i
+const isNumCol = (rows: (string | number)[][], j: number) => {
+  const vals = rows.map((r) => r[j]).filter((v) => v !== '' && v !== '—' && v !== '-' && v != null)
+  return vals.length > 0 && vals.every((v) => typeof v === 'number' || NUMERIC.test(String(v).trim()))
+}
+/**
+ * Tabla de datos del gráfico (accesible y sin depender del color ni del ratón). Cada columna se alinea según su
+ * contenido: cifras a la derecha y texto a la izquierda, con el título alineado igual que sus celdas.
+ * `inline`: sin el desplegable «Ver datos» (cuando la tabla es la vista principal).
+ */
+export function DataTable({ head, rows, inline }: { head: string[]; rows: (string | number)[][]; inline?: boolean }) {
+  const num = head.map((_, j) => j > 0 && isNumCol(rows, j))
+  const table = (
+    <div className={cn('overflow-auto rounded-lg border border-outline-2', inline ? 'max-h-96' : 'mt-2 max-h-56')}>
+      <table className="w-full tabular-nums">
+        <thead className="sticky top-0 bg-surface-2"><tr>{head.map((h, j) => <th key={j} className={cn('px-3 py-1.5 font-medium whitespace-nowrap text-text-2', num[j] ? 'text-right' : 'text-left')}>{h}</th>)}</tr></thead>
+        <tbody>{rows.map((r, i) => <tr key={i} className="border-t border-outline-2">{r.map((c, j) => <td key={j} className={cn('px-3 py-1.5', num[j] ? 'text-right whitespace-nowrap' : 'text-left', j === 0 && 'font-medium text-text')}>{typeof c === 'number' ? fmt(c) : c}</td>)}</tr>)}</tbody>
+      </table>
+    </div>
+  )
+  if (inline) return <div className="text-xs">{table}</div>
   return (
     <details className="mt-2 text-xs">
       <summary className="cursor-pointer text-primary select-none">Ver datos</summary>
-      <div className="mt-2 max-h-56 overflow-auto rounded-lg border border-outline-2">
-        <table className="w-full tabular-nums">
-          <thead className="sticky top-0 bg-surface-2"><tr>{head.map((h) => <th key={h} className="px-2 py-1 text-left font-medium text-text-2">{h}</th>)}</tr></thead>
-          <tbody>{rows.map((r, i) => <tr key={i} className="border-t border-outline-2">{r.map((c, j) => <td key={j} className={cn('px-2 py-1', j && 'text-right')}>{typeof c === 'number' ? fmt(c) : c}</td>)}</tr>)}</tbody>
-        </table>
-      </div>
+      {table}
     </details>
   )
 }

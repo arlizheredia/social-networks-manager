@@ -5,8 +5,9 @@ export const NAV: NavItem[] = [
   { to: '/', label: 'Inicio', icon: 'home' },
   { to: '/publicar', label: 'Publicar', icon: 'send' },
   { to: '/grupos', label: 'Grupos', icon: 'group' },
-  { to: '/comentarios', label: 'Comentarios', icon: 'forum' },
+  { to: '/comentarios', label: 'Comentarios', icon: 'forum', short: 'Coment.' },
   { to: '/informes', label: 'Informes', icon: 'summarize' },
+  { to: '/competencia', label: 'Competencia', icon: 'radar', short: 'Compet.' },
   { to: '/historial', label: 'Historial', icon: 'history' },
   { to: '/ayuda', label: 'Ayuda', icon: 'menu_book' },
 ]

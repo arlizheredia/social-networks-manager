@@ -83,13 +83,13 @@ export function Layout() {
 
       <nav aria-label="Navegación" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-outline-2 bg-surface-2 md:hidden">
         {NAV.filter((n) => n.to !== '/ayuda').map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.to === '/'} className="flex flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium text-text-2 no-underline">
+          <NavLink key={n.to} to={n.to} end={n.to === '/'} className="flex min-w-0 flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium text-text-2 no-underline" title={n.label}>
             {({ isActive }) => (
               <>
-                <span className={cn('grid h-8 w-12 place-items-center rounded-full', isActive && 'bg-secondary-container text-on-secondary-container')}>
+                <span className={cn('grid h-8 w-11 max-w-full place-items-center rounded-full', isActive && 'bg-secondary-container text-on-secondary-container')}>
                   <Icon name={n.icon} fill={isActive} />
                 </span>
-                {n.label}
+                <span className="max-w-full truncate px-0.5">{n.short ?? n.label}</span>
               </>
             )}
           </NavLink>

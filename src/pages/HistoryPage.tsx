@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ymd } from '@/features/publisher/report'
+import { CompHistoryTab } from '@/features/competition/components'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Banner, Button, Card, Dialog, Empty, Icon, IconButton, Input, PageHead, Tabs, Textarea, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
@@ -191,14 +192,15 @@ function TrackingHistory() {
 
 export default function HistoryPage() {
   const [params] = useSearchParams()
-  const [tab, setTab] = useState<'pub' | 'seg'>(params.get('tab') === 'seg' ? 'seg' : 'pub')
-  useEffect(() => { if (params.get('tab') === 'seg') setTab('seg') }, [params])
+  const fromUrl = (): 'pub' | 'seg' | 'comp' => (params.get('tab') === 'seg' ? 'seg' : params.get('tab') === 'comp' ? 'comp' : 'pub')
+  const [tab, setTab] = useState<'pub' | 'seg' | 'comp'>(fromUrl())
+  useEffect(() => { if (params.get('tab')) setTab(fromUrl()) }, [params]) // eslint-disable-line react-hooks/exhaustive-deps
   const pend = usePublisher((s) => s.history.filter((h) => h.items.some((i) => i.status === 'pending')).length + awaitingItems(s.history).length)
   return (
     <div>
-      <PageHead title="Historial" sub="Todo lo publicado en tus grupos y todos los seguimientos de comentarios." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pub', label: 'Publicaciones en grupos', icon: 'send', badge: pend || undefined }, { id: 'seg', label: 'Seguimientos de comentarios', icon: 'track_changes' }]} />
-      {tab === 'pub' ? <PublishHistory /> : <TrackingHistory />}
+      <PageHead title="Historial" sub="Todo lo publicado en tus grupos, los seguimientos de comentarios y los informes de competencia." />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pub', label: 'Publicaciones en grupos', icon: 'send', badge: pend || undefined }, { id: 'seg', label: 'Seguimientos de comentarios', icon: 'track_changes' }, { id: 'comp', label: 'Competencia', icon: 'radar' }]} />
+      {tab === 'pub' ? <PublishHistory /> : tab === 'seg' ? <TrackingHistory /> : <CompHistoryTab />}
     </div>
   )
 }
