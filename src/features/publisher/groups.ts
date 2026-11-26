@@ -9,6 +9,7 @@ export interface GroupInput { url: string; name: string; tags: string[]; notes: 
 
 /** Devuelve el nombre del duplicado si ya existe un grupo con esa URL. */
 export function upsertGroup(data: GroupInput, id?: string | null): string | null {
+  data = { ...data, tags: data.tags.filter(Boolean).slice(0, 1) }
   const key = groupKey(data.url)
   const dup = getPub().groups.find((g) => groupKey(g.url) === key && g.id !== id)
   if (dup) return dup.name
@@ -27,6 +28,35 @@ export function deleteGroups(ids: string[]) {
   return () => setPub({ groups: before })
 }
 
+/* ---------- Etiquetas ---------- */
+/** Etiqueta limpia; si ya existe con otras mayúsculas o sin tilde, se usa la existente («holguin» → «Holguín»). */
+export function normTag(t: string, existing: string[] = []) {
+  const c = String(t || '').trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim().slice(0, 40)
+  if (!c) return ''
+  const k = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  return existing.find((e) => k(e) === k(c)) || c
+}
+/** Asigna una etiqueta (o ninguna, con null) a varios grupos: cada grupo tiene como mucho una. Devuelve cuántos cambiaron. */
+export function setGroupTag(ids: string[], tag: string | null) {
+  const all = [...new Set(getPub().groups.flatMap((g) => g.tags))]
+  const t = tag ? normTag(tag, all) : ''
+  let changed = 0
+  setPub((s) => ({ groups: s.groups.map((g) => {
+    if (!ids.includes(g.id) || (g.tags[0] || '') === t && g.tags.length <= 1) return g
+    changed++
+    return { ...g, tags: t ? [t] : [] }
+  }) }))
+  return changed
+}
+export const NO_TAG = 'Sin etiqueta'
+/** Secciones por etiqueta, ordenadas; al final, los grupos sin etiqueta. */
+export function groupsByTag<T extends { tags: string[]; name: string }>(list: T[], only?: string | null): { tag: string; items: T[] }[] {
+  const m = new Map<string, T[]>()
+  list.forEach((g) => { const t = g.tags[0] || NO_TAG; if (!only || only === t) m.set(t, [...(m.get(t) || []), g]) })
+  return [...m.entries()].sort(([a], [b]) => (a === NO_TAG ? 1 : b === NO_TAG ? -1 : a.localeCompare(b, 'es')))
+    .map(([tag, items]) => ({ tag, items: items.sort((x, y) => x.name.localeCompare(y.name, 'es', { sensitivity: 'base' })) }))
+}
+
 type Imp = { url: string; name: string; tags: string[]; notes: string; active: boolean }
 /** Acepta la salida del marcador (FBP_GROUPS:[…]), un JSON exportado o líneas «Nombre | URL». */
 export function parseImport(txt0: string): Imp[] {
@@ -41,7 +71,7 @@ export function parseImport(txt0: string): Imp[] {
     arr.forEach((o0) => {
       const o = (typeof o0 === 'string' ? { url: o0 } : o0) as Record<string, unknown>
       const url = normGroupUrl(o.url || o.link || o.id)
-      if (url) out.push({ url, name: String(o.name || o.nombre || '').trim() || url.split('/groups/')[1].replace('/', ''), tags: Array.isArray(o.tags) ? (o.tags as string[]) : [], notes: String(o.notes || ''), active: o.active !== false })
+      if (url) out.push({ url, name: String(o.name || o.nombre || '').trim() || url.split('/groups/')[1].replace('/', ''), tags: Array.isArray(o.tags) ? (o.tags as string[]).filter(Boolean).slice(0, 1) : [], notes: String(o.notes || ''), active: o.active !== false })
     })
   } else txt.split(/\r?\n/).forEach((line0) => {
     const line = line0.trim()

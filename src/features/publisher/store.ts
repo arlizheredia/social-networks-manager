@@ -54,7 +54,8 @@ export function cleanGroups(list: unknown): Group[] {
     return [{
       id: okId(g.id) || uid().slice(0, 36), name: nm || slug,
       nameFixed: g.nameFixed === true || (!!raw && nm !== raw.replace(/\s+/g, ' ').trim()) || !nm,
-      url, tags: (Array.isArray(g.tags) ? g.tags : []).map((t) => str(t, 40).trim()).filter(Boolean).slice(0, 20),
+      // una sola etiqueta por grupo (p. ej. la provincia): se conserva la primera
+      url, tags: (Array.isArray(g.tags) ? g.tags : []).map((t) => str(t, 40).trim()).filter(Boolean).slice(0, 1),
       notes: str(g.notes, 500), active: g.active !== false, approval: g.approval === true,
       lastShared: okTs(g.lastShared), created: okTs(g.created) || Date.now(),
     }]
@@ -140,7 +141,7 @@ function legacy(): Partial<PublisherState> {
 export const usePublisher = create<PublisherState>()(
   persist(() => ({ ...initial }), {
     name: 'snm.publisher',
-    version: 4,
+    version: 5,
     // Nuevos valores por defecto: quien conservaba el valor por defecto anterior pasa al nuevo.
     // v2: ventana de trabajo «minimizada». v3: publicación automática y pausa de 15 s. v4: sin modo prueba.
     migrate: (persisted, version) => {
