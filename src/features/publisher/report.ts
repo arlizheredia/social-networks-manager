@@ -24,11 +24,49 @@ function sharedText(h: HistoryEntry) {
 }
 const NOT_FAIL = /^(Descartado|Marcado como no publicado)|24 h/
 
+/** Varias difusiones de la misma publicación (misma dirección, p. ej. el mismo reel compartido en varias tandas)
+ *  cuentan como una sola publicación: se unen sus grupos y se conserva el nombre y el texto de la primera que los tenga. */
+export function mergeSameUrl<T extends { h: HistoryEntry; its: HistoryItem[] }>(E: T[]): T[] {
+  const by = new Map<string, T>(), out: T[] = []
+  for (const x of E) {
+    const k = x.h.url ? x.h.url.replace(/\/+$/, '').toLowerCase() : ''
+    const prev = k ? by.get(k) : undefined
+    if (!prev) { const c = { ...x, h: { ...x.h }, its: [...x.its] }; if (k) by.set(k, c); out.push(c); continue }
+    prev.its.push(...x.its)
+    if (!prev.h.name && x.h.name) prev.h.name = x.h.name
+    if (!String(prev.h.text || '').trim() && x.h.text) prev.h.text = x.h.text
+  }
+  return out
+}
+/** Listado de los grupos en que se compartió (nombre y enlace), sin repetir; indica las veces y si espera aprobación. */
+function groupList(items: HistoryItem[]) {
+  const by = new Map<string, { name: string; url: string; n: number; aw: number; rej: number }>()
+  items.filter((i) => i.status === 'done').forEach((i) => {
+    const k = i.gid || i.url || i.name, g = by.get(k) || { name: i.name, url: i.url, n: 0, aw: 0, rej: 0 }
+    g.n++; if (i.review === 'awaiting') g.aw++; if (i.review === 'rejected') g.rej++
+    by.set(k, g)
+  })
+  if (!by.size) return []
+  const L = [`Listado de grupos en los que se compartió (${by.size})`]
+  ;[...by.values()].sort((a, b) => a.name.localeCompare(b.name, 'es')).forEach((g) => {
+    const notes = [g.n > 1 ? `${g.n} veces` : '', g.aw ? 'en aprobación' : '', g.rej ? 'rechazada' : ''].filter(Boolean)
+    L.push(`- «${g.name}»${notes.length ? ` (${notes.join(', ')})` : ''}: ${g.url}`)
+  })
+  L.push('')
+  return L
+}
+/** «Grupos en los que se compartió: 5» (grupos distintos; si alguno se repitió, también las veces). */
+function groupsLine(its: HistoryItem[]) {
+  const done = its.filter((i) => i.status === 'done'), n = new Set(done.map((i) => i.gid || i.name)).size
+  return `Grupos en los que se compartió: ${n}${done.length > n ? ` (${done.length} veces en total)` : ''}`
+}
+
 /** Publicaciones con actividad en una fecha. */
 export const entriesOn = (date: string) => getPub().history.filter((h) => h.items.some((i) => itemDay(h, i) === date))
 
 export function buildDiffusionReport(date: string, ids: string[], meta: { author: string; brand: string }) {
-  const E = getPub().history.filter((h) => ids.includes(h.id)).map((h) => ({ h, its: h.items.filter((i) => itemDay(h, i) === date) })).filter((x) => x.its.length)
+  const E0 = getPub().history.filter((h) => ids.includes(h.id)).map((h) => ({ h, its: h.items.filter((i) => itemDay(h, i) === date) })).filter((x) => x.its.length)
+  const E = mergeSameUrl(E0)
   const L = [DIFFUSION_TITLE, `Fecha: ${cap(longDate(date))}`]
   if (meta.author) L.push(`Elaborado por: ${meta.author}`)
   if (meta.brand) L.push(`Cliente / marca: ${meta.brand}`)
@@ -59,8 +97,9 @@ export function buildDiffusionReport(date: string, ids: string[], meta: { author
     const txt = sharedText(h)
     L.push(`${k + 1}. ${entryRef(h)}`)
     if (txt) L.push(`Texto: «${clip(txt, 300)}»`)
-    L.push(`Grupos en los que se compartió: ${its.filter((i) => i.status === 'done').length}`, '')
+    L.push(groupsLine(its), '')
   })
+  L.push(...groupList(all))
   const O: string[] = []
   const TRANS = /^(publicando|posting|publicado|posted|compartiendo|sharing|subiendo|uploading|cargando|loading|enviando|sending|procesando|processing)\b/i
   const fbOf = (i: HistoryItem) => { const m = String(i.fbMsg || '').split(' · ').find((x) => x && !TRANS.test(x.trim())); return m ? ` Facebook indicó: «${clip(m.replace(/[«»]/g, '"'), 200)}».` : '' }
@@ -85,7 +124,7 @@ export function buildDiffusionRangeReport(from: string, to: string, ids: string[
   if (from > to) [from, to] = [to, from]
   if (from === to) return buildDiffusionReport(from, ids, meta)
   const inR = (h: HistoryEntry, i: HistoryItem) => { const d = itemDay(h, i); return d >= from && d <= to }
-  const E = getPub().history.filter((h) => ids.includes(h.id)).map((h) => ({ h, its: h.items.filter((i) => inR(h, i)) })).filter((x) => x.its.length)
+  const E = mergeSameUrl(getPub().history.filter((h) => ids.includes(h.id)).map((h) => ({ h, its: h.items.filter((i) => inR(h, i)) })).filter((x) => x.its.length))
     .sort((a, b) => Math.min(...a.its.map((i) => i.at || a.h.date)) - Math.min(...b.its.map((i) => i.at || b.h.date)))
   const L = [DIFFUSION_TITLE, `Periodo: del ${longDate(from)} al ${longDate(to)}`]
   if (meta.author) L.push(`Elaborado por: ${meta.author}`)
@@ -122,13 +161,14 @@ export function buildDiffusionRangeReport(from: string, to: string, ids: string[
     L.push(`${k + 1}. ${entryRef(h)}`)
     if (txt) L.push(`Texto: «${clip(txt, 300)}»`)
     L.push(`Fecha: ${ds.map((d) => cap(shortDay(d))).join(', ')}`)
-    L.push(`Grupos en los que se compartió: ${its.filter((i) => i.status === 'done').length}`, '')
+    L.push(groupsLine(its), '')
   })
   if (groups.size) {
     L.push('Grupos más usados')
     ;[...groups.values()].sort((a, b) => b.n - a.n || a.name.localeCompare(b.name)).slice(0, 10).forEach((g) => L.push(`- «${g.name}»: ${pl(g.n, 'publicación', 'publicaciones')}${g.ok !== g.n ? ` (${g.ok} visibles)` : ''}`))
     L.push('')
   }
+  L.push(...groupList(all))
   const O: string[] = []
   const reasons = new Map<string, Set<string>>()
   sk.filter((i) => i.error).forEach((i) => { const r = reasonOf(i.error); reasons.set(r, (reasons.get(r) || new Set()).add(i.name)) })

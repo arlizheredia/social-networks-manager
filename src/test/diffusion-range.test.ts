@@ -41,3 +41,37 @@ describe('Nombre de la publicación en los informes', () => {
     expect(entryRef({ ...h, name: undefined })).toBe('https://www.facebook.com/reel/1')
   })
 })
+
+describe('El mismo reel en varias tandas', () => {
+  it('cuenta como una sola publicación en el resumen y en el detalle', async () => {
+    const { buildDiffusionReport } = await import('@/features/publisher/report')
+    const same = (id: string, items: object[], extra: object = {}) => ({ ...entry(id, '2026-11-25', items), url: 'https://www.facebook.com/reel/1452025332928122', ...extra }) as HistoryEntry
+    usePublisher.setState({ history: [
+      same('x1', [item('g1', 'Compras Holguín', '2026-11-25'), item('g2', 'Ventas Cuba', '2026-11-25')], { name: 'Combos de Navidad' }),
+      same('x2', [item('g3', 'Revolico', '2026-11-25'), item('g1', 'Compras Holguín', '2026-11-25')]),
+      entry('y', '2026-11-25', [item('g2', 'Ventas Cuba', '2026-11-25')]),
+    ] })
+    const t = buildDiffusionReport('2026-11-25', ['x1', 'x2', 'y'], { author: '', brand: '' })
+    expect(t).toContain('se compartieron 2 publicaciones en 5 grupos')
+    expect(t.match(/reel\/1452025332928122/g)).toHaveLength(1)
+    expect(t).toContain('1. «Combos de Navidad» · https://www.facebook.com/reel/1452025332928122')
+    expect(t).toContain('Grupos en los que se compartió: 3 (4 veces en total)')
+  })
+})
+
+describe('Listado de grupos en el informe de difusión', () => {
+  it('lista cada grupo una vez con su nombre y enlace, también en HTML', async () => {
+    const { buildDiffusionReport } = await import('@/features/publisher/report')
+    const gi = (gid: string, name: string, extra: object = {}) => ({ ...item(gid, name, '2026-11-26'), url: `https://www.facebook.com/groups/${gid}`, ...extra })
+    usePublisher.setState({ history: [
+      entry('p1', '2026-11-26', [gi('g1', 'Ventas Cuba'), gi('g2', 'Compras Holguín', { review: 'awaiting' }), gi('g3', 'Revolico', { status: 'skipped', error: 'El grupo no permite publicaciones' })]),
+      entry('p2', '2026-11-26', [gi('g1', 'Ventas Cuba')]),
+    ] })
+    const t = buildDiffusionReport('2026-11-26', ['p1', 'p2'], { author: '', brand: '' })
+    expect(t).toContain('Listado de grupos en los que se compartió (2)\n- «Compras Holguín» (en aprobación): https://www.facebook.com/groups/g2\n- «Ventas Cuba» (2 veces): https://www.facebook.com/groups/g1')
+    expect(t).not.toMatch(/- «Revolico».*groups\/g3/)
+    const html = reportTextToHtml(t)
+    expect(html).toContain('<h2>Listado de grupos en los que se compartió (2)</h2>')
+    expect(html).toContain('<a href="https://www.facebook.com/groups/g1">https://www.facebook.com/groups/g1</a>')
+  })
+})

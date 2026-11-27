@@ -66,7 +66,9 @@ export function printPdf(title: string, body: string, mono = false) {
 
 /** Texto de informe (editable por el usuario) → HTML: 1.ª línea título, secciones conocidas, listas y «Clave: valor». */
 export function reportTextToHtml(t: string) {
-  const H2 = /^(Resumen|Detalle por publicación|Actividad por día|Grupos más usados|Observaciones|Próximos pasos|Conclusiones|Notas|Recomendaciones|Listado)\s*:?$/i
+  const H2 = /^(Resumen|Detalle por publicación|Actividad por día|Grupos más usados|Observaciones|Próximos pasos|Conclusiones|Notas|Recomendaciones|Listado|Listado de grupos en los que se compartió \(\d+\))\s*:?$/i
+  // los enlaces se pueden pulsar en Word, PDF y HTML
+  const lk = (x: string) => esc(x).replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}">${u}</a>`)
   const KV = /^(Fecha|Periodo|Elaborado por|Cliente \/ marca|Enlace|Texto|Grupos en los que se compartió|Grupos|Total|Por etiqueta|Etiquetas|Etiqueta|Notas|Último uso|Estado)\s*:/
   let html = '', first = true, inList = false
   const close = () => { if (inList) { html += '</ul>'; inList = false } }
@@ -75,9 +77,9 @@ export function reportTextToHtml(t: string) {
     if (!x) { close(); return }
     if (first) { html += `<h1>${esc(x)}</h1>`; first = false; return }
     if (H2.test(x) || /^[^:]{1,60} · \d+ grupos?$/.test(x)) { close(); html += `<h2>${esc(x.replace(/:$/, ''))}</h2>` }
-    else if (/^\d+\.\s+/.test(x)) { close(); html += `<h3>${esc(x)}</h3>` }
-    else if (/^[-•·]\s+/.test(x)) { if (!inList) { html += '<ul>'; inList = true } html += `<li>${esc(x.replace(/^[-•·]\s+/, ''))}</li>` }
-    else if (KV.test(x)) { close(); const i = x.indexOf(':'); html += `<p class="kv"><b>${esc(x.slice(0, i))}:</b> ${esc(x.slice(i + 1).trim())}</p>` }
+    else if (/^\d+\.\s+/.test(x)) { close(); html += `<h3>${lk(x)}</h3>` }
+    else if (/^[-•·]\s+/.test(x)) { if (!inList) { html += '<ul>'; inList = true } html += `<li>${lk(x.replace(/^[-•·]\s+/, ''))}</li>` }
+    else if (KV.test(x)) { close(); const i = x.indexOf(':'); html += `<p class="kv"><b>${esc(x.slice(0, i))}:</b> ${lk(x.slice(i + 1).trim())}</p>` }
     else { close(); html += `<p>${esc(x)}</p>` }
   })
   close()
