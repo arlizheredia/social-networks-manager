@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Icon, IconButton, toast } from '@/components/ui'
+import { Button, FloatingWindow, Icon, IconButton, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText, download } from '@/lib/util'
 import { beep } from '@/lib/timers'
@@ -231,10 +231,8 @@ export function RunDialog() {
   const finished = R.idx >= e.items.length
   const gated = !finished && !gate(state).ok && !(R.auto && (!R.autoRunning || R.stop))
   return (
-    <div className="fixed inset-0 z-40 flex items-stretch justify-center bg-scrim p-0 sm:p-4" role="dialog" aria-modal="true" aria-label={R.auto ? 'Publicación automática' : 'Publicación asistida'}
-      onKeyDown={(ev) => { if (ev.key === 'Escape') closeRun() }}>
-      <div className="flex w-full max-w-5xl flex-col overflow-hidden bg-surface shadow-3 sm:rounded-[28px]">
-        <div className="flex items-center gap-3 border-b border-outline-2 px-5 py-3">
+    <FloatingWindow id="publicacion" label={R.auto ? 'Publicación automática' : 'Publicación asistida'} className="h-[min(760px,calc(100dvh-16px))] w-[min(1024px,calc(100vw-16px))]"
+      head={<>
           <div className="min-w-0 max-w-[45%] shrink">
             <h2 className="truncate text-lg leading-6" title={entryTitle(e)}>{entryTitle(e)}</h2>
             <div className="text-xs text-text-2">{R.auto ? 'Publicación automática' : 'Publicación asistida'}</div>
@@ -243,7 +241,7 @@ export function RunDialog() {
           <span className="text-sm whitespace-nowrap text-text-2 tabular-nums">{done} de {e.items.length}</span>
           {!finished && <Button size="sm" variant="tonal" icon="picture_in_picture_alt" onClick={() => { setRunBg(true); toast('Publicación en segundo plano: sigue en curso. Tócala abajo para volver.', 'picture_in_picture_alt') }} title="Ocultar esta pantalla y seguir usando la app; la publicación continúa"><span className="hidden sm:inline">Segundo plano</span></Button>}
           <IconButton icon="close" label="Cerrar" onClick={() => closeRun()} />
-        </div>
+      </>}>
         {runs.length > 1 && (
           <div className="flex items-center gap-2 overflow-x-auto border-b border-outline-2 px-5 py-2 text-xs">
             <span className="shrink-0 text-text-2">En paralelo:</span>
@@ -275,7 +273,6 @@ export function RunDialog() {
             {finished ? <Summary e={e} /> : gated ? <Cooldown R={R} e={e} /> : R.auto ? <Auto R={R} e={e} /> : <Assisted R={R} e={e} />}
           </main>
         </div>
-      </div>
-    </div>
+    </FloatingWindow>
   )
 }
