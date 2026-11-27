@@ -107,14 +107,16 @@ export interface PublisherState {
   sel: { ids: string[]; known: string[] } | null
   lock: number | null
   lockMsg: string
-  /** Id del historial de una publicación a medias. */
+  /** Id del historial de la última publicación a medias (compatibilidad). */
   runId: string | null
+  /** Publicaciones a medias (pueden ser varias: la publicación automática admite varias en paralelo). */
+  runIds: string[]
   report: { author: string; brand: string }
 }
 
 const initial: PublisherState = {
   groups: [], history: [], templates: [], settings: DEF_SETTINGS, draft: { url: '', text: '', name: '' }, sel: null,
-  lock: null, lockMsg: '', runId: null, report: { author: '', brand: '' },
+  lock: null, lockMsg: '', runId: null, runIds: [], report: { author: '', brand: '' },
 }
 
 /** Ajustes de Facebook Publisher con los nuevos valores por defecto donde se conservaban los antiguos. */
@@ -164,6 +166,7 @@ export const usePublisher = create<PublisherState>()(
         groups: cleanGroups(p.groups), history: cleanHistory(p.history), templates: cleanTemplates(p.templates),
         settings: cleanSettings(p.settings), lock: okTs(p.lock),
         draft: { url: str(p.draft?.url, 2000), text: str(p.draft?.text, 63206), name: str(p.draft?.name, 120) },
+        runIds: [...new Set([...(Array.isArray(p.runIds) ? p.runIds.filter((x): x is string => typeof x === 'string') : []), ...(typeof p.runId === 'string' && p.runId ? [p.runId] : [])])].slice(0, 20),
       }
     },
   }),

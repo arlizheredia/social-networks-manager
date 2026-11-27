@@ -7,8 +7,8 @@ import { beep } from '@/lib/timers'
 import { initials, parseFbUrl } from '../fb'
 import { useMedia, copyImage } from '../media'
 import { usePublisher } from '../store'
-import { cleanErr, failedItems, gate, hhmm, reasonOf } from '../logic'
-import { clearForm, closeRun, confirmTestOk, setRunBg, continueAuto, jumpTo, mark, panicStop, retryFailed, retryNow, runText, stepOpen, stopAfterCurrent, useRun, type RunState } from '../run'
+import { cleanErr, entryTitle, failedItems, gate, hhmm, reasonOf } from '../logic'
+import { clearForm, closeRun, confirmTestOk, setRunBg, showRun, continueAuto, jumpTo, mark, panicStop, retryFailed, retryNow, runText, stepOpen, stopAfterCurrent, useRun, type RunState } from '../run'
 import type { HistoryEntry } from '../types'
 
 const STEP_P: [RegExp, number][] = [[/Comprobando/, 0.03], [/Preparando/, 0.05], [/Abriendo el grupo/, 0.1], [/Esperando a que cargue/, 0.2], [/cuadro de publicación/, 0.35], [/Escribiendo/, 0.5], [/Adjuntando/, 0.62], [/vista previa/, 0.72], [/«Publicar» esté/, 0.8], [/Publicando/, 0.9]]
@@ -130,7 +130,7 @@ function Auto({ R, e }: { R: RunState; e: HistoryEntry }) {
         <p className="max-w-lg text-text-2">{R.stopMsg || 'La has detenido. Tu progreso está guardado.'}</p>
         {!!errs.length && <details className="max-w-lg text-left"><summary className="cursor-pointer text-primary">Ver incidencias</summary><ul className="mt-2 list-disc pl-5 text-sm">{errs.map((i) => <li key={i.gid}><b>{i.name}:</b> {i.error}</li>)}</ul></details>}
         <div className="flex flex-wrap justify-center gap-2">
-          {R.testDone ? <Button icon="bolt" onClick={confirmTestOk}>Todo bien: publicar de verdad</Button> : !G.ok && G.reason !== 'pause' ? null : <Button icon="play_arrow" onClick={continueAuto}>Continuar</Button>}
+          {R.testDone ? <Button icon="bolt" onClick={confirmTestOk}>Todo bien: publicar de verdad</Button> : !G.ok && G.reason !== 'pause' ? null : <Button icon="play_arrow" onClick={() => continueAuto()}>Continuar</Button>}
           <Button variant="outlined" onClick={() => closeRun(true)}>{R.testDone || !pending ? 'Cerrar' : 'Continuar más tarde'}</Button>
         </div>
       </div>
@@ -147,7 +147,7 @@ function Auto({ R, e }: { R: RunState; e: HistoryEntry }) {
         <div className="mb-3 flex flex-wrap items-center gap-3 rounded-2xl bg-warn-container p-3 text-warn">
           <Icon name="autorenew" />
           <div className="flex-1"><b>{R.retry.reason}</b><div className="text-xs">Reintento {R.retry.n} de {R.retry.max} en {Math.max(0, Math.ceil((R.retry.until - now) / 1000))} s. Si no se resuelve, se detendrá por completo.</div></div>
-          <Button size="sm" variant="tonal" icon="refresh" onClick={retryNow}>Reintentar ahora</Button>
+          <Button size="sm" variant="tonal" icon="refresh" onClick={() => retryNow()}>Reintentar ahora</Button>
         </div>
       )}
       <div className="flex flex-col items-center gap-4 rounded-2xl bg-surface-2 p-4 sm:flex-row">
@@ -156,7 +156,7 @@ function Auto({ R, e }: { R: RunState; e: HistoryEntry }) {
           <b className="absolute inset-0 grid place-items-center font-display text-lg tabular-nums">{p} %</b>
         </div>
         <div className="min-w-0 flex-1">
-          <h4 aria-live="polite" className="mb-1 text-base">{R.phase === 'wait' ? 'Pausa de seguridad…' : R.step || 'Preparando…'}</h4>
+          <h4 aria-live="polite" className="mb-1 text-base">{R.phase === 'wait' ? (R.step.startsWith('Esperando turno') ? R.step : 'Pausa de seguridad…') : R.step || 'Preparando…'}</h4>
           <p className="text-xs text-text-2">La extensión trabaja en la ventana de Facebook. No la cierres ni cierres esta pestaña; puedes seguir usando otras aplicaciones.</p>
           {!!R.log.length && <ol className="mt-2 list-decimal pl-5 text-xs text-text-2">{R.log.slice(-5).map((x, i) => <li key={i}>{x}</li>)}</ol>}
         </div>
@@ -168,7 +168,7 @@ function Auto({ R, e }: { R: RunState; e: HistoryEntry }) {
         </div>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="outlined" icon="stop_circle" onClick={stopAfterCurrent}>Detener después de este grupo</Button>
+        <Button variant="outlined" icon="stop_circle" onClick={() => stopAfterCurrent()}>Detener después de este grupo</Button>
         <Button variant="text" className="!text-error" icon="report" onClick={panicStop}>Facebook me mostró un aviso</Button>
       </div>
     </div>
@@ -217,6 +217,7 @@ function Summary({ e }: { e: HistoryEntry }) {
 /** Pantalla de publicación (asistida o automática) a pantalla casi completa. */
 export function RunDialog() {
   const R = useRun((s) => s.run)
+  const runs = useRun((s) => s.runs)
   const history = usePublisher((s) => s.history)
   const state = usePublisher()
   const e = R ? history.find((h) => h.id === R.entryId) : undefined
@@ -240,6 +241,23 @@ export function RunDialog() {
           {!finished && <Button size="sm" variant="tonal" icon="picture_in_picture_alt" onClick={() => { setRunBg(true); toast('Publicación en segundo plano: sigue en curso. Tócala abajo para volver.', 'picture_in_picture_alt') }} title="Ocultar esta pantalla y seguir usando la app; la publicación continúa"><span className="hidden sm:inline">Segundo plano</span></Button>}
           <IconButton icon="close" label="Cerrar" onClick={() => closeRun()} />
         </div>
+        {runs.length > 1 && (
+          <div className="flex items-center gap-2 overflow-x-auto border-b border-outline-2 px-5 py-2 text-xs">
+            <span className="shrink-0 text-text-2">En paralelo:</span>
+            {runs.map((x) => {
+              const xe = history.find((h) => h.id === x.entryId)
+              if (!xe) return null
+              const d = xe.items.filter((i) => i.status !== 'pending').length, on = x.entryId === R.entryId
+              return (
+                <button key={x.entryId} onClick={() => showRun(x.entryId)} aria-current={on || undefined}
+                  className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-medium transition-colors', on ? 'bg-secondary-container text-on-secondary-container' : 'text-text-2 ring-1 ring-outline-2 hover:bg-text/8')}>
+                  <Icon name={d >= xe.items.length ? 'task_alt' : x.autoRunning && !x.stop ? 'progress_activity' : 'pause_circle'} className={cn('!text-[14px]', x.autoRunning && !x.stop && d < xe.items.length && 'animate-spin')} />
+                  <span className="max-w-40 truncate">{entryTitle(xe)}</span><span className="tabular-nums opacity-70">{d}/{xe.items.length}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
         <div className="flex min-h-0 flex-1">
           <aside className="hidden w-60 shrink-0 overflow-y-auto border-r border-outline-2 p-2 md:block">
             {e.items.map((it, i) => (

@@ -17,10 +17,10 @@ import { SettingsDialog } from '@/features/settings/SettingsDialog'
 
 function ResumeBanners() {
   const state = usePublisher()
-  const run = useRun((s) => s.run)
+  const runs = useRun((s) => s.runs)
   const [hidden, setHidden] = useState(false)
-  if (run) return null
-  const h = state.runId ? state.history.find((x) => x.id === state.runId) : undefined
+  // la primera publicación a medias que no esté ya en curso
+  const h = state.runIds.filter((id) => !runs.some((r) => r.entryId === id)).map((id) => state.history.find((x) => x.id === id)).find((x) => x && x.items.some((i) => i.status === 'pending'))
   const pend = h ? h.items.filter((i) => i.status === 'pending').length : 0
   if (h && pend && !hidden) {
     const done = h.items.length - pend, pct = Math.round((done / h.items.length) * 100)
@@ -31,7 +31,7 @@ function ResumeBanners() {
           <Button size="sm" variant="text" onClick={() => { setHidden(true); toast('También puedes reanudarla desde el Historial.') }}>Más tarde</Button>
           <Button size="sm" variant="text" onClick={async () => {
             if (!(await confirmBox('¿Descartar los grupos que faltan?', `Los ${pend} grupo(s) pendientes se marcarán como no publicados. Lo ya publicado no cambia.`, 'Descartar', true))) return
-            setPub((s) => ({ runId: null, history: s.history.map((x) => (x.id !== h.id ? x : { ...x, items: x.items.map((i) => (i.status === 'pending' ? { ...i, status: 'skipped' as const, error: 'Descartado', at: Date.now(), inflight: undefined } : i)) })) }))
+            setPub((s) => ({ runId: null, runIds: s.runIds.filter((x) => x !== h.id), history: s.history.map((x) => (x.id !== h.id ? x : { ...x, items: x.items.map((i) => (i.status === 'pending' ? { ...i, status: 'skipped' as const, error: 'Descartado', at: Date.now(), inflight: undefined } : i)) })) }))
             toast('Publicación cerrada')
           }}>Descartar</Button>
         </div>}>

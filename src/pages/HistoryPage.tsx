@@ -117,7 +117,7 @@ function PublishHistory() {
         <label className="text-xs text-text-2">Hasta<Input type="date" className="!h-10" max={ymd(Date.now())} value={to} onChange={(e) => { setTo(e.target.value); if (e.target.value < from) setFrom(e.target.value) }} /></label>
         <Button variant="outlined" icon="summarize" className="self-end" onClick={() => nav(`/informes?tipo=difusion&desde=${from}&hasta=${to}`)}>{from === to ? 'Informe del día' : 'Informe del periodo'}</Button>
         <span className="flex-1" />
-        <Button variant="text" icon="delete_sweep" className="self-end" onClick={async () => { if (await confirmBox('¿Borrar todo el historial de publicaciones?', 'Esta acción no afecta a lo publicado en Facebook ni a tus grupos.', 'Borrar', true)) { setPub({ history: [], runId: null }); toast('Historial borrado') } }}>Borrar historial</Button>
+        <Button variant="text" icon="delete_sweep" className="self-end" onClick={async () => { if (await confirmBox('¿Borrar todo el historial de publicaciones?', 'Esta acción no afecta a lo publicado en Facebook ni a tus grupos.', 'Borrar', true)) { setPub({ history: [], runId: null, runIds: [] }); toast('Historial borrado') } }}>Borrar historial</Button>
       </div>
       {!!aw.length && (
         <Card filled>

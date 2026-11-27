@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Icon, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
-import { setRunBg, startRun, useRun } from '@/features/publisher/run'
+import { showRun, startRun, useRun, type RunState } from '@/features/publisher/run'
 import { usePublisher } from '@/features/publisher/store'
 import { entryTitle } from '@/features/publisher/logic'
 import { autoPct } from '@/features/publisher/components/RunDialog'
@@ -55,28 +55,29 @@ function Interrupted({ icon, title, sub, pct, onContinue, onDismiss }: { icon: s
 /** Procesos en segundo plano (publicación en grupos y extracción de comentarios): siguen en curso y se pueden traer
  *  de vuelta a primer plano con un toque. */
 export function BackgroundTasks() {
-  const R = useRun((s) => s.run)
+  const { runs, front } = useRun()
   const history = usePublisher((s) => s.history)
   const { running, bg, tracks } = useTR()
   const nav = useNavigate()
   const { pathname } = useLocation()
 
-  const e = R ? history.find((h) => h.id === R.entryId) : undefined
-  const pubBg = !!(R && e && R.bg)
-  const pubDone = !!(R && e && R.idx >= e.items.length)
+  // publicaciones en curso que no están en pantalla (en segundo plano o detrás de otra)
+  const entry = (id: string) => history.find((h) => h.id === id)
+  const isDone = (r: RunState) => { const e = entry(r.entryId); return !!e && r.idx >= e.items.length }
+  const bgRuns = runs.filter((r) => entry(r.entryId) && (r.bg || r.entryId !== front))
   const t = running ? tracks.find((x) => x.id === running) : undefined
   const onTracking = pathname === '/comentarios' || pathname === '/comentarios/'
   const trShow = !!t && (bg || !onTracking)
 
   // Procesos interrumpidos por recargar o cerrar la página (su avance está guardado)
-  const runId = usePublisher((s) => s.runId)
-  const [hidePub, setHidePub] = useState<string | null>(null)
-  const ph = !R && runId && hidePub !== runId ? history.find((h) => h.id === runId && h.items.some((i) => i.status === 'pending')) : undefined
-  const pubInt = ph && pathname !== '/publicar' ? ph : undefined // en Publicar ya se ofrece reanudar en un aviso
+  const runIds = usePublisher((s) => s.runIds)
+  const [hidden, setHidden] = useState<string[]>([])
+  const pubInts = pathname === '/publicar' ? [] // en Publicar ya se ofrece reanudar en un aviso
+    : runIds.filter((id) => !runs.some((r) => r.entryId === id) && !hidden.includes(id)).map(entry).filter((h): h is NonNullable<typeof h> => !!h && h.items.some((i) => i.status === 'pending'))
   const trInt = !running ? tracks.filter((x) => x.interrupted && x.status === 'paused') : []
 
   // Recargar o cerrar la página durante una operación en curso: el navegador pide confirmación
-  const busy = !!(R && e && !pubDone) || !!running
+  const busy = runs.some((r) => !isDone(r)) || !!running
   useEffect(() => {
     if (!busy) return
     const h = (ev: BeforeUnloadEvent) => { ev.preventDefault(); ev.returnValue = '' }
@@ -85,25 +86,28 @@ export function BackgroundTasks() {
   }, [busy])
 
   // Aviso cuando termina una publicación que estaba en segundo plano
-  const notified = useRef<string | null>(null)
+  const notified = useRef(new Set<string>())
   useEffect(() => {
-    if (pubBg && pubDone && e && notified.current !== e.id) {
-      notified.current = e.id
-      toast('La publicación en grupos terminó', 'task_alt', { label: 'Ver resumen', onClick: () => setRunBg(false) })
-    }
-  }, [pubBg, pubDone, e])
+    bgRuns.forEach((r) => {
+      const e = entry(r.entryId)
+      if (e && isDone(r) && !notified.current.has(r.entryId)) {
+        notified.current.add(r.entryId)
+        toast(`Terminó la publicación «${entryTitle(e).slice(0, 60)}»`, 'task_alt', { label: 'Ver resumen', onClick: () => showRun(r.entryId) })
+      }
+    })
+  })
 
-  if (!pubBg && !trShow && !pubInt && !trInt.length) return null
-  let pub = null
-  if (pubBg && R && e) {
+  if (!bgRuns.length && !trShow && !pubInts.length && !trInt.length) return null
+  const pubs = bgRuns.map((R) => {
+    const e = entry(R.entryId)!
     const n = e.items.length, d = e.items.filter((i) => i.status !== 'pending').length
-    const it = e.items[R.idx]
+    const it = e.items[R.idx], done = isDone(R)
     const mode = R.auto ? 'Automática' : 'Asistida'
-    const sub = pubDone ? `${mode} · terminada · toca para ver el resumen`
-      : R.auto ? (R.autoRunning && !R.stop ? `${mode} · ${d} de ${n} · ${R.phase === 'wait' ? 'pausa de seguridad' : it ? it.name : 'preparando'}` : `${mode} · ${d} de ${n} · en pausa`)
+    const sub = done ? `${mode} · terminada · toca para ver el resumen`
+      : R.auto ? (R.autoRunning && !R.stop ? `${mode} · ${d} de ${n} · ${R.phase === 'wait' ? (R.step.startsWith('Esperando turno') ? 'esperando turno' : 'pausa de seguridad') : it ? it.name : 'preparando'}` : `${mode} · ${d} de ${n} · en pausa`)
       : `${mode} · ${d} de ${n} · esperando tu acción en «${it?.name || ''}»`
-    pub = <Task icon="campaign" title={entryTitle(e)} sub={sub} pct={pubDone ? 100 : R.auto ? autoPct(R, e) : Math.round((d / n) * 100)} done={pubDone} onOpen={() => setRunBg(false)} />
-  }
+    return <Task key={R.entryId} icon="campaign" title={entryTitle(e)} sub={sub} pct={done ? 100 : R.auto ? autoPct(R, e) : Math.round((d / n) * 100)} done={done} onOpen={() => showRun(R.entryId)} />
+  })
   let tr = null
   if (trShow && t) {
     const pr = trackProgress(t)
@@ -112,12 +116,12 @@ export function BackgroundTasks() {
       onOpen={() => { useTR.setState({ bg: false }); nav('/comentarios') }} />
   }
   return (
-    <div className="fixed top-[68px] right-3 left-3 z-30 flex flex-col items-end gap-2 sm:left-auto md:right-4" aria-label="Procesos en segundo plano">
-      {pub}{tr}
-      {pubInt && (() => { const d = pubInt.items.filter((i) => i.status !== 'pending').length; return (
-        <Interrupted icon="campaign" title={entryTitle(pubInt)} sub={`Publicación interrumpida · ${d} de ${pubInt.items.length} grupos`} pct={Math.round((d / pubInt.items.length) * 100)}
-          onContinue={() => startRun(pubInt.id)} onDismiss={() => { setHidePub(pubInt.id); toast('Puedes continuarla desde Publicar o el Historial') }} />
-      ) })()}
+    <div className="fixed top-[68px] right-3 left-3 z-30 flex max-h-[calc(100dvh-90px)] flex-col items-end gap-2 overflow-y-auto sm:left-auto md:right-4" aria-label="Procesos en segundo plano">
+      {pubs}{tr}
+      {pubInts.map((h) => { const d = h.items.filter((i) => i.status !== 'pending').length; return (
+        <Interrupted key={h.id} icon="campaign" title={entryTitle(h)} sub={`Publicación interrumpida · ${d} de ${h.items.length} grupos`} pct={Math.round((d / h.items.length) * 100)}
+          onContinue={() => startRun(h.id)} onDismiss={() => { setHidden((x) => [...x, h.id]); toast('Puedes continuarla desde Publicar o el Historial') }} />
+      ) })}
       {trInt.map((x) => { const pr = trackProgress(x); return (
         <Interrupted key={x.id} icon="forum" title={x.name} sub={`Extracción interrumpida · ${pr.done} de ${pr.n} · ${pr.comments.toLocaleString('es')} comentarios guardados`} pct={pr.pct}
           onContinue={() => { nav('/comentarios'); runTracking(x.id) }} onDismiss={() => { delete x.interrupted; void putTracking(x); toast('Puedes continuarla desde Comentarios › Seguimiento') }} />
