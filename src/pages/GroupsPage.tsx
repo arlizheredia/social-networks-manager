@@ -66,7 +66,7 @@ function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void })
 }
 
 /** Etiqueta de los grupos seleccionados: una por grupo; elegir otra la reemplaza. */
-function TagDialog({ ids, onClose }: { ids: string[] | null; onClose: () => void }) {
+function TagDialog({ ids, onClose, onDone }: { ids: string[] | null; onClose: () => void; onDone?: () => void }) {
   const groups = usePublisher((s) => s.groups)
   const [t, setT] = useState('')
   useEffect(() => { if (ids) setT('') }, [ids])
@@ -79,6 +79,7 @@ function TagDialog({ ids, onClose }: { ids: string[] | null; onClose: () => void
     if (tag && !n) return
     const ch = setGroupTag(ids, n)
     toast(!ch ? 'Sin cambios' : n ? `${ch} grupo${ch === 1 ? '' : 's'} en «${n}»` : `Etiqueta quitada de ${ch} grupo${ch === 1 ? '' : 's'}`)
+    onDone?.()
     onClose()
   }
   return (
@@ -283,7 +284,7 @@ export default function GroupsPage() {
       )}
       <GroupDialog open={edit.open} group={edit.g} onClose={() => setEdit({ open: false, g: null })} />
       <ImportDialog open={imp} onClose={() => setImp(false)} />
-      <TagDialog ids={tagIds} onClose={() => setTagIds(null)} />
+      <TagDialog ids={tagIds} onClose={() => setTagIds(null)} onDone={() => setChecked(new Set())} />
       <ReportDialog open={rep} onClose={() => setRep(false)} checked={new Set(ids)} />
     </div>
   )
