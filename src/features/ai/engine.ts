@@ -96,7 +96,7 @@ function call<T>(msg: Record<string, unknown>, opts: { onProgress?: Pending['onP
   return new Promise<T>((res, rej) => {
     const id = ++W.seq
     W.pend.set(id, { res: res as (v: unknown) => void, rej, onProgress: opts.onProgress, onStep: opts.onStep })
-    opts.signal?.addEventListener('abort', () => { if (W.pend.delete(id)) rej(Object.assign(new Error('Cancelado'), { name: 'AbortError' })) }, { once: true })
+    opts.signal?.addEventListener('abort', () => { if (W.pend.delete(id)) { w.postMessage({ type: 'skip', id }); rej(Object.assign(new Error('Cancelado'), { name: 'AbortError' })) } }, { once: true })
     w.postMessage({ ...msg, id, lib: AI_LIB })
   })
 }
@@ -338,19 +338,13 @@ export class AINotInstalled extends Error { constructor() { super('Primero insta
 const ensure = () => { if (!useAI.getState().installed) throw new AINotInstalled() }
 
 /** Redacta con el modelo de lenguaje. onProgress recibe 0..1 */
-/** Carga el modelo de redacción por adelantado (p. ej. al abrir el diálogo de respuestas) para que la primera respuesta tarde menos. */
-export async function warmLLM() {
-  if (!useAI.getState().installed) return
-  try { ensure(); await run({ type: 'load', kind: 'llm', model: LLM_MODEL, task: 'text-generation', tries: await llmTries() }) } catch { /* se reintenta al generar */ }
-}
-
-export async function generate(system: string, user: string, opts: { signal?: AbortSignal; onProgress?: (x: number) => void; maxTokens?: number; temperature?: number; stopAtLine?: boolean } = {}) {
+export async function generate(system: string, user: string, opts: { signal?: AbortSignal; onProgress?: (x: number) => void; maxTokens?: number; temperature?: number } = {}) {
   ensure()
   const MAX = opts.maxTokens ?? 420
   return run<string>({
     type: 'gen', model: LLM_MODEL, tries: await llmTries(),
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-    opts: { max_new_tokens: MAX, do_sample: true, temperature: opts.temperature ?? 0.7, top_p: 0.9, repetition_penalty: 1.1, ...(opts.stopAtLine ? { stopAtLine: true } : {}) },
+    opts: { max_new_tokens: MAX, do_sample: true, temperature: opts.temperature ?? 0.7, top_p: 0.9, repetition_penalty: 1.1 },
   }, { signal: opts.signal, onStep: (a, b) => opts.onProgress?.(Math.min(0.97, a / b)) })
 }
 
