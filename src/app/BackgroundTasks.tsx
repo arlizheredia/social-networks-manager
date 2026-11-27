@@ -1,12 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Icon, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
-import { setRunBg, useRun } from '@/features/publisher/run'
+import { setRunBg, startRun, useRun } from '@/features/publisher/run'
 import { usePublisher } from '@/features/publisher/store'
 import { entryTitle } from '@/features/publisher/logic'
 import { autoPct } from '@/features/publisher/components/RunDialog'
-import { trackProgress, useTR } from '@/features/comments/tracking'
+import { putTracking, runTracking, trackProgress, useTR } from '@/features/comments/tracking'
 
 /** Anillo de progreso pequeño con el porcentaje dentro. */
 function Ring({ pct, spin }: { pct: number | null; spin?: boolean }) {
@@ -35,6 +35,23 @@ function Task({ icon, title, sub, pct, done, onOpen }: { icon: string; title: st
   )
 }
 
+/** Proceso que se interrumpió al recargar o cerrar la página: su avance está guardado y se puede continuar. */
+function Interrupted({ icon, title, sub, pct, onContinue, onDismiss }: { icon: string; title: string; sub: string; pct: number; onContinue: () => void; onDismiss: () => void }) {
+  return (
+    <div className="flex w-full items-center gap-3 rounded-2xl bg-warn-container px-3 py-2 shadow-3 ring-1 ring-outline-2 sm:w-80">
+      <Ring pct={pct} />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1 text-sm font-medium"><Icon name={icon} className="!text-[16px] text-warn" /><span className="truncate">{title}</span></span>
+        <span className="block truncate text-xs text-text-2">{sub}</span>
+        <span className="mt-1 flex gap-1">
+          <button onClick={onContinue} className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-on-primary">Continuar</button>
+          <button onClick={onDismiss} className="rounded-full px-3 py-1 text-xs font-medium text-text-2 hover:bg-text/8">Más tarde</button>
+        </span>
+      </span>
+    </div>
+  )
+}
+
 /** Procesos en segundo plano (publicación en grupos y extracción de comentarios): siguen en curso y se pueden traer
  *  de vuelta a primer plano con un toque. */
 export function BackgroundTasks() {
@@ -51,6 +68,22 @@ export function BackgroundTasks() {
   const onTracking = pathname === '/comentarios' || pathname === '/comentarios/'
   const trShow = !!t && (bg || !onTracking)
 
+  // Procesos interrumpidos por recargar o cerrar la página (su avance está guardado)
+  const runId = usePublisher((s) => s.runId)
+  const [hidePub, setHidePub] = useState<string | null>(null)
+  const ph = !R && runId && hidePub !== runId ? history.find((h) => h.id === runId && h.items.some((i) => i.status === 'pending')) : undefined
+  const pubInt = ph && pathname !== '/publicar' ? ph : undefined // en Publicar ya se ofrece reanudar en un aviso
+  const trInt = !running ? tracks.filter((x) => x.interrupted && x.status === 'paused') : []
+
+  // Recargar o cerrar la página durante una operación en curso: el navegador pide confirmación
+  const busy = !!(R && e && !pubDone) || !!running
+  useEffect(() => {
+    if (!busy) return
+    const h = (ev: BeforeUnloadEvent) => { ev.preventDefault(); ev.returnValue = '' }
+    window.addEventListener('beforeunload', h)
+    return () => window.removeEventListener('beforeunload', h)
+  }, [busy])
+
   // Aviso cuando termina una publicación que estaba en segundo plano
   const notified = useRef<string | null>(null)
   useEffect(() => {
@@ -60,7 +93,7 @@ export function BackgroundTasks() {
     }
   }, [pubBg, pubDone, e])
 
-  if (!pubBg && !trShow) return null
+  if (!pubBg && !trShow && !pubInt && !trInt.length) return null
   let pub = null
   if (pubBg && R && e) {
     const n = e.items.length, d = e.items.filter((i) => i.status !== 'pending').length
@@ -81,6 +114,14 @@ export function BackgroundTasks() {
   return (
     <div className="fixed top-[68px] right-3 left-3 z-30 flex flex-col items-end gap-2 sm:left-auto md:right-4" aria-label="Procesos en segundo plano">
       {pub}{tr}
+      {pubInt && (() => { const d = pubInt.items.filter((i) => i.status !== 'pending').length; return (
+        <Interrupted icon="campaign" title={entryTitle(pubInt)} sub={`Publicación interrumpida · ${d} de ${pubInt.items.length} grupos`} pct={Math.round((d / pubInt.items.length) * 100)}
+          onContinue={() => startRun(pubInt.id)} onDismiss={() => { setHidePub(pubInt.id); toast('Puedes continuarla desde Publicar o el Historial') }} />
+      ) })()}
+      {trInt.map((x) => { const pr = trackProgress(x); return (
+        <Interrupted key={x.id} icon="forum" title={x.name} sub={`Extracción interrumpida · ${pr.done} de ${pr.n} · ${pr.comments.toLocaleString('es')} comentarios guardados`} pct={pr.pct}
+          onContinue={() => { nav('/comentarios'); runTracking(x.id) }} onDismiss={() => { delete x.interrupted; void putTracking(x); toast('Puedes continuarla desde Comentarios › Seguimiento') }} />
+      ) })}
     </div>
   )
 }

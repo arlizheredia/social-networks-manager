@@ -11,11 +11,15 @@ export interface TrackItem {
   status: ItemStatus; count: number; total?: number | null; saved?: number; phase?: '' | 'opening' | 'extracting' | 'retry'; error?: string; method?: string
   startedAt?: string; finishedAt?: string; partial?: boolean; order?: string | null; limit?: number; limitReached?: boolean; diag?: unknown; note?: string; attempts?: number
   retry?: { attempt: number; max: number; error: string; left: number; offline?: boolean }
+  /** trabajo de la extensión en curso (para detenerlo si la página se recarga) */
+  jobId?: string
 }
 export interface Tracking {
   id: string; createdAt: string; status: 'draft' | 'running' | 'paused' | 'done'; name: string; date: string; postIds: string[]
   items: Record<string, TrackItem>; fbOrder: 'all' | 'pert' | 'rec'; fbLimit: number; startedAt?: string; finishedAt?: string; inHist?: boolean
   halt?: { post: string; error: string; at: string }
+  /** se interrumpió al recargar o cerrar la página: se ofrece continuar */
+  interrupted?: boolean
 }
 export interface Result { key: string; tid: string; postId: string; date: string; meta: Meta; extractedAt: string; method: string; partial: boolean; keys?: string[]; comments?: RawComment[] }
 interface PComments { postId: string; comments: RawComment[]; updatedAt: string; url?: string; postAuthor?: string }

@@ -4,6 +4,7 @@
  * ritmo prudente y fusión con lo ya guardado (nunca se pierden comentarios).
  */
 import { create } from 'zustand'
+import { createStore, del as idbDel, get as idbGet, set as idbSet } from 'idb-keyval'
 import { download } from '@/lib/util'
 import { toast } from '@/components/ui'
 import { wsleep } from '@/lib/timers'
@@ -27,12 +28,26 @@ export async function loadTR() {
     const [posts, tracks] = await Promise.all([DB.all<Post>('posts'), DB.all<Tracking>('trackings')])
     posts.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''))
     tracks.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
-    // un seguimiento que quedó «en curso» al cerrar la página pasa a «en pausa»
+    // un seguimiento que quedó «en curso» al recargar o cerrar la página pasa a «en pausa» sin perder lo recogido:
+    // los comentarios ya extraídos de la publicación en curso se recuperan del punto de control y se guardan como parciales
+    const orphans: string[] = []
     for (const t of tracks) if (t.status === 'running' && useTR.getState().running !== t.id) {
-      t.status = 'paused'
-      Object.values(t.items).forEach((i) => { if (i.status === 'running') i.status = 'pending' })
+      t.status = 'paused'; t.interrupted = true
+      for (const [pid, i] of Object.entries(t.items)) {
+        if (i.status !== 'running') continue
+        if (i.jobId) orphans.push(i.jobId)
+        const ck = await idbGet<RawComment[]>(ckKey(t.id, pid), ckStore()).catch(() => undefined)
+        const p = posts.find((x) => x.id === pid)
+        if (ck?.length && p) {
+          await storeResult(t, p, fromExtractor({ source: 'social-dom-extractor', platform: p.platform, version: 3, url: p.url, title: p.title || '', comments: ck }), 'extension', true).catch(() => {})
+        }
+        Object.assign(i, { status: 'pending', phase: '', jobId: undefined, ...(ck?.length ? { partial: true } : {}) })
+        delete i.retry
+        await idbDel(ckKey(t.id, pid), ckStore()).catch(() => {})
+      }
       await DB.put('trackings', t)
     }
+    if (orphans.length) stopOrphans(orphans)
     useTR.setState({ posts, tracks, loaded: true })
   } catch (e) {
     useTR.setState({ loaded: true })
@@ -221,6 +236,18 @@ function extOpts() {
 }
 const extStop = (jobId: string) => extractorSend({ type: 'stop', jobId })
 
+/* Punto de control: los comentarios que la extensión va enviando se guardan cada pocos segundos para no perderlos si
+   la página se recarga a mitad de una publicación. */
+let ck_: ReturnType<typeof createStore> | null = null
+const ckStore = () => (ck_ ||= createStore('snm-ckpt', 'ckpt'))
+const ckKey = (tid: string, pid: string) => tid + '|' + pid
+/** Detiene en la extensión las extracciones que quedaron huérfanas tras recargar (espera a que la extensión conteste). */
+function stopOrphans(ids: string[]) {
+  let tries = 0
+  const go = () => { if (useExtension.getState().extractor) ids.forEach(extStop); else if (++tries < 20) setTimeout(go, 1500) }
+  setTimeout(go, 500)
+}
+
 function extExtract(url: string, onProgress: (m: Record<string, unknown>) => void, fb: { order: string; limit: number } | null) {
   const opts = extOpts(), cfg = fb || { order: 'all', limit: 0 }
   const jobId = uid('j_') + '~o=' + cfg.order + '~l=' + cfg.limit // el orden pedido viaja en el identificador (lo lee el extractor)
@@ -297,7 +324,15 @@ async function collectPost(t: Tracking, p: Post, it: TrackItem, onProg: (u: Reco
   it.order = fb ? fb.order : null; it.limit = fb ? fb.limit : 0
   const job = extExtract(p.url, (m) => onProg({ phase: m.phase, count: m.count, total: m.total, note: m.note }), fb)
   RUN.job = job.jobId
-  const r = await job.promise
+  it.jobId = job.jobId
+  await DB.put('trackings', t).catch(() => {})
+  let ckN = 0
+  const ck = setInterval(() => {
+    const j = jobs.get(job.jobId)
+    if (j && j.acc.length > ckN) { ckN = j.acc.length; idbSet(ckKey(t.id, p.id), j.acc, ckStore()).catch(() => {}) }
+  }, 4000)
+  let r: ExtResult
+  try { r = await job.promise } finally { clearInterval(ck); delete it.jobId; idbDel(ckKey(t.id, p.id), ckStore()).catch(() => {}) }
   RUN.job = null
   if (!r.data && r.acc?.length) r.data = { source: 'social-dom-extractor', platform: p.platform, version: 3, url: p.url, title: p.title || '', comments: r.acc }
   if (r.closed) {
@@ -340,7 +375,7 @@ export async function runTracking(tid: string) {
   if (miss.length) { toast(`Inicia sesión en ${miss.map(platName).join(', ')} en este navegador para iniciar el seguimiento.`); return }
   Object.assign(RUN, { stopReq: false, halt: null, extCount: 0 })
   useTR.setState({ running: tid, bg: false })
-  delete t.halt
+  delete t.halt; delete t.interrupted
   t.status = 'running'; t.startedAt ||= new Date().toISOString()
   await putTracking(t)
   const opts = extOpts(), gap = opts.gap * 1000
