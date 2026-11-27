@@ -235,7 +235,10 @@ export function RunDialog() {
       onKeyDown={(ev) => { if (ev.key === 'Escape') closeRun() }}>
       <div className="flex w-full max-w-5xl flex-col overflow-hidden bg-surface shadow-3 sm:rounded-[28px]">
         <div className="flex items-center gap-3 border-b border-outline-2 px-5 py-3">
-          <h2 className="text-lg">{R.auto ? 'Publicación automática' : 'Publicación asistida'}</h2>
+          <div className="min-w-0 max-w-[45%] shrink">
+            <h2 className="truncate text-lg leading-6" title={entryTitle(e)}>{entryTitle(e)}</h2>
+            <div className="text-xs text-text-2">{R.auto ? 'Publicación automática' : 'Publicación asistida'}</div>
+          </div>
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-primary-container"><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${R.auto ? autoPct(R, e) : (done / e.items.length) * 100}%` }} /></div>
           <span className="text-sm whitespace-nowrap text-text-2 tabular-nums">{done} de {e.items.length}</span>
           {!finished && <Button size="sm" variant="tonal" icon="picture_in_picture_alt" onClick={() => { setRunBg(true); toast('Publicación en segundo plano: sigue en curso. Tócala abajo para volver.', 'picture_in_picture_alt') }} title="Ocultar esta pantalla y seguir usando la app; la publicación continúa"><span className="hidden sm:inline">Segundo plano</span></Button>}
