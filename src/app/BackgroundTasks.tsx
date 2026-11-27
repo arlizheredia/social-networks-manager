@@ -24,8 +24,8 @@ function Ring({ pct, spin }: { pct: number | null; spin?: boolean }) {
 
 function Task({ icon, title, sub, pct, done, onOpen }: { icon: string; title: string; sub: string; pct: number | null; done?: boolean; onOpen: () => void }) {
   return (
-    <button onClick={onOpen} title="Volver a primer plano" className="flex w-full items-center gap-3 rounded-2xl bg-surface-3 px-3 py-2 text-left shadow-3 ring-1 ring-outline-2 transition-colors hover:bg-surface-2 sm:w-80">
-      {done ? <span className="grid size-10 shrink-0 place-items-center rounded-full bg-success-container text-success"><Icon name="task_alt" /></span> : <Ring pct={pct} spin />}
+    <button onClick={onOpen} title="Volver a primer plano" className="anim-slide-in flex w-full items-center gap-3 rounded-2xl bg-surface-3 px-3 py-2 text-left shadow-3 ring-1 ring-outline-2 transition-colors hover:bg-surface-2 sm:w-80">
+      {done ? <span className="anim-bounce grid size-10 shrink-0 place-items-center rounded-full bg-success-container text-success"><Icon name="task_alt" /></span> : <Ring pct={pct} spin />}
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1 text-sm font-medium"><Icon name={icon} className="!text-[16px] text-primary" /><span className="truncate">{title}</span></span>
         <span className="block truncate text-xs text-text-2">{sub}</span>
@@ -38,7 +38,7 @@ function Task({ icon, title, sub, pct, done, onOpen }: { icon: string; title: st
 /** Proceso que se interrumpió al recargar o cerrar la página: su avance está guardado y se puede continuar. */
 function Interrupted({ icon, title, sub, pct, onContinue, onDismiss }: { icon: string; title: string; sub: string; pct: number; onContinue: () => void; onDismiss: () => void }) {
   return (
-    <div className="flex w-full items-center gap-3 rounded-2xl bg-warn-container px-3 py-2 shadow-3 ring-1 ring-outline-2 sm:w-80">
+    <div className="anim-slide-in flex w-full items-center gap-3 rounded-2xl bg-warn-container px-3 py-2 shadow-3 ring-1 ring-outline-2 sm:w-80">
       <Ring pct={pct} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1 text-sm font-medium"><Icon name={icon} className="!text-[16px] text-warn" /><span className="truncate">{title}</span></span>

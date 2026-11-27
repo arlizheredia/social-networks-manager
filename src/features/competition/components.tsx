@@ -1,6 +1,7 @@
 /** Componentes de la sección Competencia: vista del informe, fichas de competidores, perfil de la marca e historial. */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, NumberField, Popover, Switch, Textarea, confirmBox, toast } from '@/components/ui'
+import { collapseRows } from '@/lib/motion'
+import { Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, NumberField, Popover, Switch, Textarea, confirmBox, toast, SkeletonList } from '@/components/ui'
 import { copyRich } from '@/lib/util'
 import { cn } from '@/lib/cn'
 import { downloadHtml, downloadWord, printPdf } from '@/lib/docexport'
@@ -251,7 +252,7 @@ export function CompetitorsTab({ brand }: { brand: string }) {
           <CardHead title={`Encontrados en Internet · por confirmar (${pending.length})`} sub="La búsqueda en Google los señala como posibles competidores. Confírmalos para incluirlos en el ranking o descártalos (no volverán a aparecer)." />
           <div className="divide-y divide-outline-2 overflow-hidden rounded-2xl border border-outline-2 bg-surface">
             {pending.map((c) => (
-              <div key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <div key={c.id} data-row-id={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name="public" className="!text-[20px]" /></span>
                 <div className="min-w-48 flex-1">
                   <div className="font-medium">{c.name} <a href={c.url} target="_blank" rel="noopener" className="ml-1 text-xs font-normal">{c.url.replace(/^https?:\/\/(www\.)?/, '')}</a></div>
@@ -260,8 +261,8 @@ export function CompetitorsTab({ brand }: { brand: string }) {
                 </div>
                 <Button size="sm" icon="check" onClick={() => { confirmCompetitor(c.id); toast(`«${c.name}» confirmado como competidor`) }}>Confirmar</Button>
                 <IconButton size="sm" icon="edit" label="Corregir ficha" onClick={() => setEdit(c)} />
-                <IconButton size="sm" icon="delete" label="Eliminar esta ficha" onClick={async () => { if (await confirmBox(`¿Eliminar «${c.name}»?`, 'Se borra su ficha. Si vuelve a aparecer en una búsqueda, se creará de nuevo (para que no vuelva, usa Descartar).', 'Eliminar', true)) { removeCompetitor(c.id); toast(`«${c.name}» eliminado`) } }} />
-                <IconButton size="sm" icon="block" label="Descartar: no es un competidor (no volverá a aparecer)" onClick={() => { deleteCompetitor(c.id); toast(`«${c.name}» descartado`) }} />
+                <IconButton size="sm" icon="delete" label="Eliminar esta ficha" onClick={async () => { if (await confirmBox(`¿Eliminar «${c.name}»?`, 'Se borra su ficha. Si vuelve a aparecer en una búsqueda, se creará de nuevo (para que no vuelva, usa Descartar).', 'Eliminar', true)) { await collapseRows([c.id]); removeCompetitor(c.id); toast(`«${c.name}» eliminado`) } }} />
+                <IconButton size="sm" icon="block" label="Descartar: no es un competidor (no volverá a aparecer)" onClick={async () => { await collapseRows([c.id]); deleteCompetitor(c.id); toast(`«${c.name}» descartado`) }} />
               </div>
             ))}
           </div>
@@ -273,7 +274,7 @@ export function CompetitorsTab({ brand }: { brand: string }) {
         {!comps.length ? <Empty icon={<Icon name="travel_explore" />} title="Aún no hay competidores detectados">Genera un informe de competencia: la IA buscará a la competencia en tus seguimientos de comentarios. Para analizar a un competidor a fondo, añade sus publicaciones de Facebook a un seguimiento.</Empty> : (
           <div className="divide-y divide-outline-2 overflow-hidden rounded-2xl border border-outline-2">
             {sorted.map((c) => (
-              <div key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <div key={c.id} data-row-id={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name={c.page ? 'storefront' : 'travel_explore'} className="!text-[20px]" /></span>
                 <div className="min-w-48 flex-1">
                   <div className="font-medium">{c.name}{c.rating != null && <span className="ml-2 text-xs text-text-2">★ {c.rating}</span>}</div>
@@ -281,8 +282,8 @@ export function CompetitorsTab({ brand }: { brand: string }) {
                   <div className="text-xs text-text-2">{c.source === 'web' ? 'Encontrado en Internet' : c.source === 'detectado' ? 'Detectado por la IA' : 'Ficha anterior'}{c.mentions ? ` · ${c.mentions} ${c.mentions === 1 ? 'mención' : 'menciones'}` : ''}{c.lastSeen ? ` · visto ${new Date(c.lastSeen).toLocaleDateString('es')}` : ''}{c.page ? ' · tiene página seguida' : ''}{c.manual?.length ? ' · corregido a mano' : ''}</div>
                 </div>
                 <IconButton size="sm" icon="edit" label="Corregir ficha" onClick={() => setEdit(c)} />
-                <IconButton size="sm" icon="delete" label="Eliminar esta ficha" onClick={async () => { if (await confirmBox(`¿Eliminar «${c.name}»?`, 'Se borra su ficha y sus datos. Si vuelve a aparecer en los comentarios o en una búsqueda, se creará de nuevo (para que no vuelva, usa Descartar).', 'Eliminar', true)) { removeCompetitor(c.id); toast(`«${c.name}» eliminado`) } }} />
-                <IconButton size="sm" icon="block" label="Descartar: no es un competidor (no volverá a aparecer)" onClick={async () => { if (await confirmBox('¿Descartar este competidor?', `«${c.name}» se quitará y la IA no lo volverá a crear aunque aparezca en los comentarios.`, 'Descartar', true)) deleteCompetitor(c.id) }} />
+                <IconButton size="sm" icon="delete" label="Eliminar esta ficha" onClick={async () => { if (await confirmBox(`¿Eliminar «${c.name}»?`, 'Se borra su ficha y sus datos. Si vuelve a aparecer en los comentarios o en una búsqueda, se creará de nuevo (para que no vuelva, usa Descartar).', 'Eliminar', true)) { await collapseRows([c.id]); removeCompetitor(c.id); toast(`«${c.name}» eliminado`) } }} />
+                <IconButton size="sm" icon="block" label="Descartar: no es un competidor (no volverá a aparecer)" onClick={async () => { if (await confirmBox('¿Descartar este competidor?', `«${c.name}» se quitará y la IA no lo volverá a crear aunque aparezca en los comentarios.`, 'Descartar', true)) { await collapseRows([c.id]); deleteCompetitor(c.id) } }} />
               </div>
             ))}
           </div>
@@ -315,6 +316,7 @@ export function CompHistoryTab() {
   }
   const sorted = useMemo(() => shown, [shown])
   if (view) return <CompReportView {...view} dashboard={view.model ? <CompDashboard m={view.model} /> : undefined} back={{ label: 'Volver al historial', onClick: () => setView(null) }} />
+  if (!loaded) return <SkeletonList rows={3} />
   if (loaded && !list.length) return <Card><Empty icon={<Icon name="radar" />} title="Aún no hay informes de competencia">Créalos en la sección Competencia; quedan guardados aquí para analizarlos después.</Empty></Card>
   return (
     <div className="space-y-3">
@@ -325,7 +327,7 @@ export function CompHistoryTab() {
         <span className="flex-1" />
         {ids.length > 0 && <>
           <Button icon="summarize" onClick={() => consolidate(shown.filter((r) => sel.has(r.id)))}>Consolidado ({ids.length})</Button>
-          <Button variant="text" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar informes?', `Se eliminarán ${ids.length} informe(s) de competencia.`, 'Eliminar', true)) { await deleteCompReports(ids); setSel(new Set()) } }}>Eliminar</Button>
+          <Button variant="text" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar informes?', `Se eliminarán ${ids.length} informe(s) de competencia.`, 'Eliminar', true)) { await collapseRows(ids); await deleteCompReports(ids); setSel(new Set()) } }}>Eliminar</Button>
         </>}
       </div>
       {sorted.length > 0 && (
@@ -338,14 +340,14 @@ export function CompHistoryTab() {
       )}
       <div className="divide-y divide-outline-2 rounded-3xl border border-outline-2 bg-surface">
         {sorted.map((r) => (
-          <div key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <div key={r.id} data-row-id={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
             <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={sel.has(r.id)} onChange={(e) => { const s = new Set(sel); e.target.checked ? s.add(r.id) : s.delete(r.id); setSel(s) }} aria-label="Seleccionar informe" />
             <div className="min-w-48 flex-1">
               <div className="truncate font-medium">Competencia {r.brand} · {r.from === r.to ? new Date(r.from + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }) : `${new Date(r.from + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })} – ${new Date(r.to + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}`}</div>
               <div className="truncate text-xs text-text-2">{r.headline} · creado {new Date(r.createdAt).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</div>
             </div>
             <IconButton icon="visibility" label="Ver informe" onClick={() => open(r)} />
-            <IconButton icon="delete" label="Eliminar" onClick={async () => { if (await confirmBox('¿Eliminar el informe?', 'Se borrará del historial.', 'Eliminar', true)) deleteCompReports([r.id]) }} />
+            <IconButton icon="delete" label="Eliminar" onClick={async () => { if (await confirmBox('¿Eliminar el informe?', 'Se borrará del historial.', 'Eliminar', true)) { await collapseRows([r.id]); deleteCompReports([r.id]) } }} />
           </div>
         ))}
         {!sorted.length && <p className="p-6 text-center text-text-2">No hay informes en esas fechas.</p>}

@@ -46,6 +46,7 @@ export function Popover({ trigger, children, className, align = 'left' }: { trig
         <div ref={menu} style={pos ?? { left: 0, top: 0 }} className={cn(
           'fixed z-50 max-w-[calc(100vw-16px)] min-w-56 overflow-y-auto rounded-2xl bg-surface-2 p-2 shadow-3',
           !pos && 'invisible',
+          pos && (pos.bottom != null ? 'anim-pop-up' : 'anim-pop'),
           // sin ancho propio, el menú crece hasta que cada opción cabe en una línea
           !/(^|\s)w-/.test(className ?? '') && 'w-max',
           className,

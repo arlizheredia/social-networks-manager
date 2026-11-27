@@ -6,6 +6,7 @@
  */
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
+import { Icon } from '@/components/ui/Icon'
 
 const fmt = (n: number) => n.toLocaleString('es')
 /** Marcas redondas para el eje: 0, 5, 10… o 0, 20, 40… */
@@ -78,6 +79,21 @@ export function DataTable({ head, rows, inline }: { head: string[]; rows: (strin
   )
 }
 
+/** Conmutador único de la app para ver un gráfico como gráfico o como tabla. */
+export function ViewToggle({ table, onChange }: { table: boolean; onChange: (table: boolean) => void }) {
+  const opt = (on: boolean, icon: string, label: string, v: boolean) => (
+    <button type="button" role="radio" aria-checked={on} onClick={() => onChange(v)}
+      className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors', on ? 'bg-secondary-container text-on-secondary-container' : 'text-text-2 hover:bg-text/8')}>
+      <Icon name={icon} className="!text-[16px]" />{label}
+    </button>
+  )
+  return (
+    <div role="radiogroup" aria-label="Ver como" className="inline-flex shrink-0 items-center rounded-full border border-outline-2 p-0.5">
+      {opt(!table, 'bar_chart', 'Gráfico', false)}{opt(table, 'table_rows', 'Tabla', true)}
+    </div>
+  )
+}
+
 export function Legend({ items }: { items: { label: string; color: string; line?: boolean }[] }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-2">
@@ -119,7 +135,7 @@ export function ColumnChart({ data, height = 200, lineLabel, valueLabel, onSelec
           const x0 = x(i) - bw / 2, top = y(d.value)
           return (
             <g key={i}>
-              {h > 0 && <path d={`M${x0},${y(0)} V${top + r} Q${x0},${top} ${x0 + r},${top} H${x0 + bw - r} Q${x0 + bw},${top} ${x0 + bw},${top + r} V${y(0)} Z`} fill="var(--viz-1)" opacity={hover === -1 || hover === i ? 1 : 0.45} />}
+              {h > 0 && <path d={`M${x0},${y(0)} V${top + r} Q${x0},${top} ${x0 + r},${top} H${x0 + bw - r} Q${x0 + bw},${top} ${x0 + bw},${top + r} V${y(0)} Z`} fill="var(--viz-1)" opacity={hover === -1 || hover === i ? 1 : 0.45} className="anim-grow transition-opacity" style={{ animationDelay: `${Math.min(i * 18, 400)}ms` }} />}
               {/* zona de selección más grande que la columna */}
               <rect x={padL + band * i} y={padT} width={band} height={ih} fill="transparent" tabIndex={0} aria-label={`${d.label}: ${d.value} ${valueLabel}`}
                 onMouseMove={() => show(i)} onFocus={() => show(i)} onBlur={() => { setTip(null); setHover(-1) }} onClick={() => onSelect?.(i)} className={cn('outline-none', onSelect && 'cursor-pointer')} />
@@ -168,8 +184,8 @@ export function DivergingChart({ data, height = 180 }: { data: Div[]; height?: n
         })}
         {data.map((d, i) => (
           <g key={i}>
-            <path d={bar(x(i), h(d.pos), true)} fill="var(--viz-pos)" />
-            <path d={bar(x(i), h(d.neg), false)} fill="var(--viz-neg)" />
+            <path d={bar(x(i), h(d.pos), true)} fill="var(--viz-pos)" className="anim-grow" style={{ animationDelay: `${Math.min(i * 18, 400)}ms` }} />
+            <path d={bar(x(i), h(d.neg), false)} fill="var(--viz-neg)" className="anim-grow" style={{ transformOrigin: 'top', animationDelay: `${Math.min(i * 18, 400)}ms` }} />
             <rect x={padL + band * i} y={padT} width={band} height={ih} fill="transparent" tabIndex={0} className="outline-none" aria-label={`${d.label}: ${d.pos} positivos, ${d.neg} negativos, ${d.neu} neutrales`}
               onMouseMove={() => setTip({ x: x(i), y: mid - h(d.pos), title: d.label, rows: [{ value: fmt(d.pos), label: 'positivos', color: 'var(--viz-pos)' }, { value: fmt(d.neg), label: 'negativos', color: 'var(--viz-neg)' }, { value: fmt(d.neu), label: 'neutrales' }] })}
               onFocus={() => setTip({ x: x(i), y: mid - h(d.pos), title: d.label, rows: [{ value: fmt(d.pos), label: 'positivos', color: 'var(--viz-pos)' }, { value: fmt(d.neg), label: 'negativos', color: 'var(--viz-neg)' }, { value: fmt(d.neu), label: 'neutrales' }] })}
@@ -219,7 +235,7 @@ export function RankBars({ rows, onClick, unit, color = 'var(--viz-1)' }: { rows
           <button type="button" disabled={!onClick} onClick={() => onClick?.(r.key)} className="group grid w-full grid-cols-[minmax(0,10rem)_1fr] items-center gap-3 rounded-lg px-1 py-0.5 text-left enabled:hover:bg-text/5 sm:grid-cols-[minmax(0,12rem)_1fr]" title={`${r.value} ${unit}${r.sub ? ' · ' + r.sub : ''}`}>
             <span className="truncate text-sm text-text">{r.label}</span>
             <span className="flex items-center gap-2">
-              <span className="h-3 rounded-r" style={{ width: `${(r.value / max) * 100}%`, minWidth: 3, background: color }} />
+              <span className="anim-fill h-3 rounded-r" style={{ width: `${(r.value / max) * 100}%`, minWidth: 3, background: color }} />
               <span className="text-xs font-medium text-text tabular-nums">{fmt(r.value)}</span>
             </span>
           </button>

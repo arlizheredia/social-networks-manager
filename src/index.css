@@ -91,6 +91,48 @@
 dialog::backdrop { background: var(--scrim); }
 dialog[open] { animation: dlg-in .16s ease-out; }
 @keyframes dlg-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+/* ---------- Movimiento: animaciones cortas (150–300 ms) que confirman acciones y orientan al navegar ---------- */
+:root { --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-spring: cubic-bezier(.34, 1.56, .64, 1); }
+dialog.closing { animation: dlg-out .14s ease-in forwards; }
+dialog::backdrop { animation: fade-in .16s ease-out; }
+dialog.closing::backdrop { animation: fade-out .14s ease-in forwards; }
+@keyframes dlg-out { to { opacity: 0; transform: translateY(6px) scale(.98); } }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+/* avisos */
+.anim-toast-in { animation: toast-in .24s var(--ease-out); }
+.anim-toast-out { animation: toast-out .18s ease-in forwards; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(16px) scale(.96); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(8px) scale(.96); } }
+/* contenido al cambiar de página o de pestaña */
+.anim-page { animation: page-in .22s var(--ease-out); }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
+/* menús desplegables: crecen desde el botón */
+.anim-pop { animation: pop-in .16s var(--ease-out); transform-origin: top; }
+.anim-pop-up { animation: pop-in .16s var(--ease-out); transform-origin: bottom; }
+@keyframes pop-in { from { opacity: 0; transform: scale(.94); } }
+/* tarjetas flotantes de segundo plano */
+.anim-slide-in { animation: slide-in .26s var(--ease-out); }
+@keyframes slide-in { from { opacity: 0; transform: translateX(24px); } }
+/* confirmación: ✓ con rebote */
+.anim-bounce { animation: bounce-in .42s var(--ease-spring); }
+@keyframes bounce-in { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+/* botón de copiar: el icono pasa a ✓ */
+.anim-copied { color: var(--success) !important; }
+.anim-copied .ms { animation: bounce-in .36s var(--ease-spring); }
+/* atención: un par de pulsos suaves, sin repetirse */
+.anim-attn { animation: attn 1.2s ease-out 2; }
+@keyframes attn { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
+/* barras de gráficos que crecen desde la base y barras de progreso que se rellenan */
+.anim-grow { transform-box: fill-box; transform-origin: bottom; animation: grow .5s var(--ease-out) both; }
+@keyframes grow { from { transform: scaleY(0); } }
+.anim-fill { transform-origin: left; animation: fill .6s var(--ease-out) both; }
+@keyframes fill { from { transform: scaleX(0); } }
+/* esqueletos de carga */
+.skeleton { position: relative; overflow: hidden; background: color-mix(in srgb, var(--text) 7%, transparent); border-radius: 12px; }
+.skeleton::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 7%, transparent), transparent); animation: shimmer 1.3s infinite; }
+@keyframes shimmer { to { transform: translateX(100%); } }
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 /* Informe en pantalla (mismo HTML que se exporta) */
@@ -155,21 +197,21 @@ html:not(.ms-ready) .ms { color: transparent !important; }
   --viz-grid: #e7e7e7; --viz-axis: #c2c2c2; --viz-ink: #191919; --viz-ink-2: #666666; --viz-on-fill: #ffffff; --viz-on-neu: #0b0b0b;
   /* competencia en gris neutro (la marca, en --viz-1); validado: ΔE ≥ 14 con daltonismo, contraste ≥ 3:1 */
   --viz-rival: #8f9399; --viz-rival-wash: #e3e5e8; --viz-surface: #ffffff;
-  /* mapa de calor de actividad: escala azul ordinal validada (0 = sin actividad) */
-  --heat-0: #e7e7e7; --heat-1: #84b9f3; --heat-2: #519ced; --heat-3: #2370cd; --heat-4: #0e3d7e;
+  /* fondo de las barras de cumplimiento de las metas */
+  --heat-0: #e7e7e7;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --viz-1: #338ced; --viz-1-wash: rgba(51, 140, 237, .12); --viz-pos: #338ced; --viz-neg: #eb6263; --viz-neu: #3a3b3d;
     --viz-grid: #303132; --viz-axis: #4a4b4d; --viz-ink: #efefef; --viz-ink-2: #9c9c9c; --viz-on-fill: #ffffff; --viz-on-neu: #efefef;
     --viz-rival: #8e9399; --viz-rival-wash: #3a3d41; --viz-surface: #1e1f20;
-    --heat-0: #303132; --heat-1: #1757ac; --heat-2: #2370cd; --heat-3: #519ced; --heat-4: #b6d5f8;
+    --heat-0: #303132;
   }
 }
 :root[data-theme="dark"] {
   --viz-1: #338ced; --viz-1-wash: rgba(51, 140, 237, .12); --viz-pos: #338ced; --viz-neg: #eb6263; --viz-neu: #3a3b3d;
   --viz-grid: #303132; --viz-axis: #4a4b4d; --viz-ink: #efefef; --viz-ink-2: #9c9c9c; --viz-on-fill: #ffffff; --viz-on-neu: #efefef;
     --viz-rival: #8e9399; --viz-rival-wash: #3a3d41; --viz-surface: #1e1f20;
-  --heat-0: #303132; --heat-1: #1757ac; --heat-2: #2370cd; --heat-3: #519ced; --heat-4: #b6d5f8;
+  --heat-0: #303132;
 }
 

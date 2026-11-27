@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { collapseRows } from '@/lib/motion'
 import { ymd } from '@/features/publisher/report'
 import { CompHistoryTab } from '@/features/competition/components'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Banner, Button, Card, Dialog, Empty, Icon, IconButton, Input, PageHead, Tabs, Textarea, confirmBox, toast } from '@/components/ui'
+import { Banner, Button, Card, Dialog, Empty, Icon, IconButton, Input, PageHead, Tabs, Textarea, confirmBox, toast, SkeletonList } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { fmtDate, fmtRelative } from '@/lib/util'
 import { contentIds, parseFbUrl } from '@/features/publisher/fb'
@@ -139,7 +140,7 @@ function PublishHistory() {
 }
 
 function TrackingHistory() {
-  const { tracks, running } = useTR()
+  const { tracks, running, loaded } = useTR()
   const nav = useNavigate()
   // seguimiento pedido por enlace (p. ej. desde el aviso «Ver en el historial»): se muestra y se resalta
   const [params] = useSearchParams()
@@ -154,6 +155,7 @@ function TrackingHistory() {
   const [sel, setSel] = useState<Set<string>>(new Set())
   const list = tracks.filter((t) => inHistory(t) && running !== t.id && (!from || t.date >= from) && (!to || t.date <= to))
   const ids = [...sel].filter((id) => list.some((t) => t.id === id))
+  if (!loaded) return <SkeletonList rows={3} />
   if (!tracks.some(inHistory)) return <Card><Empty icon={<Icon name="track_changes" />} title="Todavía no hay seguimientos completados">Créalos en Comentarios › Seguimiento diario.<div className="mt-3"><Button icon="forum" onClick={() => nav('/comentarios')}>Ir a Comentarios</Button></div></Empty></Card>
   return (
     <div className="space-y-3">
@@ -164,7 +166,7 @@ function TrackingHistory() {
         {ids.length > 0 && <>
           <Button variant="outlined" icon="forum" onClick={async () => { if (await openTrackingComments(ids)) nav('/comentarios/explorar') }}>Ver comentarios ({ids.length})</Button>
           <Button icon="summarize" onClick={() => nav(`/informes?t=${ids.join(',')}`)}>Crear informe ({ids.length})</Button>
-          <Button variant="text" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar seguimientos?', `Se eliminarán ${ids.length} seguimiento(s) y sus resultados.`, 'Eliminar', true)) { for (const id of ids) await deleteTracking(id); setSel(new Set()) } }}>Eliminar</Button>
+          <Button variant="text" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar seguimientos?', `Se eliminarán ${ids.length} seguimiento(s) y sus resultados.`, 'Eliminar', true)) { await collapseRows(ids); for (const id of ids) await deleteTracking(id); setSel(new Set()) } }}>Eliminar</Button>
         </>}
       </div>
       {list.length > 0 && (
@@ -178,12 +180,12 @@ function TrackingHistory() {
       )}
       <div className="divide-y divide-outline-2 rounded-3xl border border-outline-2 bg-surface">
         {list.map((t) => { const pr = trackProgress(t); return (
-          <div key={t.id} id={'seg-' + t.id} className={cn('flex flex-wrap items-center gap-3 px-4 py-3 transition-colors', focus === t.id && 'bg-primary-container/50 first:rounded-t-3xl last:rounded-b-3xl')}>
+          <div key={t.id} id={'seg-' + t.id} data-row-id={t.id} className={cn('flex flex-wrap items-center gap-3 px-4 py-3 transition-colors', focus === t.id && 'bg-primary-container/50 first:rounded-t-3xl last:rounded-b-3xl')}>
             <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={sel.has(t.id)} onChange={(e) => { const s = new Set(sel); e.target.checked ? s.add(t.id) : s.delete(t.id); setSel(s) }} />
             <div className="min-w-48 flex-1"><div className="truncate font-medium">{t.name}{t.status === 'paused' && <span className="ml-2 rounded bg-warn-container px-1.5 text-xs text-warn">parcial</span>}</div><div className="text-xs text-text-2">{trackWhen(t)} · {countTxt(pr.n, 'publicación', 'publicaciones')} · {countTxt(pr.comments, 'comentario', 'comentarios')}</div></div>
             <IconButton icon="forum" label="Ver comentarios" onClick={async () => { if (await openTrackingComments([t.id])) nav('/comentarios/explorar') }} />
             <IconButton icon="summarize" label="Crear informe" onClick={() => nav(`/informes?t=${t.id}`)} />
-            <IconButton icon="delete" label="Eliminar" onClick={async () => { if (await confirmBox('¿Eliminar el seguimiento?', 'Se borrarán sus resultados.', 'Eliminar', true)) deleteTracking(t.id) }} />
+            <IconButton icon="delete" label="Eliminar" onClick={async () => { if (await confirmBox('¿Eliminar el seguimiento?', 'Se borrarán sus resultados.', 'Eliminar', true)) { await collapseRows([t.id]); deleteTracking(t.id) } }} />
           </div>
         ) })}
         {!list.length && <p className="p-6 text-center text-text-2">No hay seguimientos en esas fechas.</p>}
@@ -202,7 +204,7 @@ export default function HistoryPage() {
     <div>
       <PageHead title="Historial" sub="Todo lo publicado en tus grupos, los seguimientos de comentarios y los informes de competencia." />
       <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pub', label: 'Publicaciones en grupos', icon: 'send', badge: pend || undefined }, { id: 'seg', label: 'Seguimientos de comentarios', icon: 'track_changes' }, { id: 'comp', label: 'Competencia', icon: 'radar' }]} />
-      {tab === 'pub' ? <PublishHistory /> : tab === 'seg' ? <TrackingHistory /> : <CompHistoryTab />}
+      <div key={tab} className="anim-page">{tab === 'pub' ? <PublishHistory /> : tab === 'seg' ? <TrackingHistory /> : <CompHistoryTab />}</div>
     </div>
   )
 }

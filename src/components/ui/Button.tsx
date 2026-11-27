@@ -33,7 +33,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full font-medium whitespace-nowrap transition-[background,box-shadow] disabled:cursor-not-allowed',
+        'inline-flex shrink-0 items-center justify-center rounded-full font-medium whitespace-nowrap transition-[background,box-shadow,transform] duration-150 active:scale-[.97] disabled:cursor-not-allowed disabled:active:scale-100',
         variants[variant],
         sizes[size],
         className,
@@ -55,7 +55,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full text-text-2 transition-colors hover:bg-text/8 disabled:opacity-40',
+        'inline-flex shrink-0 items-center justify-center rounded-full text-text-2 transition-[background,color,transform] duration-150 hover:bg-text/8 active:scale-90 disabled:opacity-40 disabled:active:scale-100',
         size === 'sm' ? 'size-8 [&_.ms]:text-[18px]' : 'size-10',
         active && 'bg-secondary-container text-on-secondary-container',
         className,

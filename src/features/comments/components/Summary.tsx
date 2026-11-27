@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Card, Chip, Icon } from '@/components/ui'
-import { ColumnChart, DataTable, DivergingChart, Legend, RankBars, SegmentedBar } from '@/components/charts/Charts'
+import { ColumnChart, DataTable, DivergingChart, Legend, RankBars, SegmentedBar, ViewToggle } from '@/components/charts/Charts'
 import { fmtNum } from '@/lib/util'
 import { activity, computeStats } from '../analysis'
 import { PLATFORMS } from '../text'
@@ -20,14 +20,16 @@ function Kpi({ icon, label, value, sub }: { icon: string; label: string; value: 
   )
 }
 
-function ChartCard({ title, sub, children, className, badge }: { title: string; sub?: string; children: React.ReactNode; className?: string; badge?: React.ReactNode }) {
+function ChartCard({ title, sub, children, className, badge, table }: { title: string; sub?: string; children: React.ReactNode; className?: string; badge?: React.ReactNode; table?: { head: string[]; rows: (string | number)[][] } }) {
+  const [asTable, setAsTable] = useState(false)
   return (
     <Card className={className}>
       <div className="mb-3 flex flex-wrap items-start gap-2">
         <div className="min-w-0 flex-1"><h3 className="text-base text-text">{title}</h3>{sub && <p className="text-xs text-text-2">{sub}</p>}</div>
-        {badge}
+        {!asTable && badge}
+        {table && <ViewToggle table={asTable} onChange={setAsTable} />}
       </div>
-      {children}
+      {asTable && table ? <DataTable inline head={table.head} rows={table.rows} /> : children}
     </Card>
   )
 }
@@ -67,7 +69,7 @@ export function Summary({ list, platform, onSearch }: { list: Comment[]; platfor
       </div>
 
       {act.buckets.length > 0 && (
-        <ChartCard
+        <ChartCard table={{ head: ['Periodo', 'Comentarios', 'Positivos', 'Negativos'], rows: act.buckets.map((b) => [b.label, b.n, b.pos, b.neg]) }}
           title={`Actividad por ${act.per}`}
           sub={[act.peak && act.peak.n ? `Pico: ${act.peak.label} con ${fmtNum(act.peak.n)} ${act.peak.n === 1 ? 'comentario' : 'comentarios'}.` : '', trendTxt].filter(Boolean).join(' ')}
           badge={<div className="flex flex-wrap items-center gap-2">
@@ -78,12 +80,11 @@ export function Summary({ list, platform, onSearch }: { list: Comment[]; platfor
         >
           <ColumnChart data={series} valueLabel={cum ? 'comentarios acumulados' : 'comentarios'} lineLabel={cum ? undefined : 'media móvil'} height={220} />
           {!cum && <div className="mt-2"><Legend items={[{ label: 'Comentarios', color: 'var(--viz-1)' }, { label: 'Tendencia (media móvil)', color: 'var(--viz-ink-2)', line: true }]} /></div>}
-          <DataTable head={['Periodo', 'Comentarios', 'Positivos', 'Negativos']} rows={act.buckets.map((b) => [b.label, b.n, b.pos, b.neg])} />
         </ChartCard>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title="Sentimiento estimado" sub="Orientativo: se estima con un diccionario de palabras y emojis. Puedes corregir cada comentario.">
+        <ChartCard table={{ head: ['Sentimiento', 'Comentarios', '%'], rows: [['Positivos', st.pos, `${pct(st.pos, T)} %`], ['Neutrales', st.neu, `${pct(st.neu, T)} %`], ['Negativos', st.neg, `${pct(st.neg, T)} %`]] }} title="Sentimiento estimado" sub="Orientativo: se estima con un diccionario de palabras y emojis. Puedes corregir cada comentario.">
           <SegmentedBar parts={[
             { label: 'Positivos', value: st.pos, color: 'var(--viz-pos)', ink: 'var(--viz-on-fill)' },
             { label: 'Neutrales', value: st.neu, color: 'var(--viz-neu)', ink: 'var(--viz-on-neu)' },
@@ -94,14 +95,12 @@ export function Summary({ list, platform, onSearch }: { list: Comment[]; platfor
             {st.pos > st.neg * 2 ? 'La conversación es mayoritariamente favorable.' : st.neg > st.pos ? 'Predominan los comentarios negativos.' : 'Positivos y negativos están equilibrados.'}{' '}
             Índice neto: <b className="font-medium text-text">{pct(st.pos, T) - pct(st.neg, T) > 0 ? '+' : ''}{pct(st.pos, T) - pct(st.neg, T)}</b> (positivos menos negativos, sobre 100).
           </p>
-          <DataTable head={['Sentimiento', 'Comentarios', '%']} rows={[['Positivos', st.pos, `${pct(st.pos, T)} %`], ['Neutrales', st.neu, `${pct(st.neu, T)} %`], ['Negativos', st.neg, `${pct(st.neg, T)} %`]]} />
         </ChartCard>
 
         {act.buckets.length > 1 ? (
-          <ChartCard title={`Sentimiento por ${act.per}`} sub="Positivos hacia arriba y negativos hacia abajo: muestra cuándo crecen las críticas.">
+          <ChartCard table={{ head: ['Periodo', 'Positivos', 'Neutrales', 'Negativos'], rows: act.buckets.map((b) => [b.label, b.pos, b.neu, b.neg]) }} title={`Sentimiento por ${act.per}`} sub="Positivos hacia arriba y negativos hacia abajo: muestra cuándo crecen las críticas.">
             <DivergingChart data={act.buckets.map((b) => ({ label: b.label, pos: b.pos, neg: b.neg, neu: b.neu }))} />
             <div className="mt-2"><Legend items={[{ label: 'Positivos', color: 'var(--viz-pos)' }, { label: 'Negativos', color: 'var(--viz-neg)' }]} /></div>
-            <DataTable head={['Periodo', 'Positivos', 'Neutrales', 'Negativos']} rows={act.buckets.map((b) => [b.label, b.pos, b.neu, b.neg])} />
           </ChartCard>
         ) : (
           <ChartCard title="Autores más activos" sub="Pulsa un nombre para ver sus comentarios.">
@@ -117,15 +116,13 @@ export function Summary({ list, platform, onSearch }: { list: Comment[]; platfor
       {(hasHours || act.byWeekday.some(Boolean)) && (
         <div className="grid gap-4 lg:grid-cols-2">
           {hasHours && (
-            <ChartCard title="Actividad por hora del día" sub={(() => { const h = act.byHour.indexOf(Math.max(...act.byHour)); return `Hora con más comentarios: ${h}:00 – ${h + 1}:00.` })()}>
+            <ChartCard table={{ head: ['Hora', 'Comentarios'], rows: act.byHour.map((n, h) => [`${h}:00`, n]) }} title="Actividad por hora del día" sub={(() => { const h = act.byHour.indexOf(Math.max(...act.byHour)); return `Hora con más comentarios: ${h}:00 – ${h + 1}:00.` })()}>
               <ColumnChart data={act.byHour.map((n, h) => ({ label: `${h} h`, value: n }))} valueLabel="comentarios" height={180} />
-              <DataTable head={['Hora', 'Comentarios']} rows={act.byHour.map((n, h) => [`${h}:00`, n])} />
             </ChartCard>
           )}
           {act.byWeekday.some(Boolean) && (
-            <ChartCard title="Actividad por día de la semana" sub={`Día con más comentarios: ${DAYS[act.byWeekday.indexOf(Math.max(...act.byWeekday))].toLowerCase()}.`}>
+            <ChartCard table={{ head: ['Día', 'Comentarios'], rows: act.byWeekday.map((n, d) => [DAYS[d], n]) }} title="Actividad por día de la semana" sub={`Día con más comentarios: ${DAYS[act.byWeekday.indexOf(Math.max(...act.byWeekday))].toLowerCase()}.`}>
               <ColumnChart data={act.byWeekday.map((n, d) => ({ label: DAYS[d].slice(0, 3), value: n }))} valueLabel="comentarios" height={180} />
-              <DataTable head={['Día', 'Comentarios']} rows={act.byWeekday.map((n, d) => [DAYS[d], n])} />
             </ChartCard>
           )}
         </div>

@@ -6,7 +6,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from '@/components/ui'
-import { DataTable, SegmentedBar } from '@/components/charts/Charts'
+import { DataTable, SegmentedBar, ViewToggle } from '@/components/charts/Charts'
 import { cn } from '@/lib/cn'
 import { PROVINCES } from './data'
 import type { CompModel, CompRow } from './analyze'
@@ -51,7 +51,7 @@ function Panel({ title, sub, table, children, className, tableFirst }: { title: 
     <section className={cn('relative min-w-0 rounded-3xl border border-outline-2 bg-surface p-4 sm:p-5', className)}>
       <div className="mb-3 flex items-start gap-2">
         <div className="min-w-0 flex-1"><h3 className="text-[15px] font-medium text-text">{title}</h3>{sub && <p className="text-xs text-text-2">{sub}</p>}</div>
-        {table && <button className="shrink-0 rounded-full px-2 py-1 text-xs font-medium text-primary hover:bg-primary/8" onClick={() => setAsTable(!asTable)}>{asTable ? 'Ver gráfico' : 'Ver tabla'}</button>}
+        {table && <ViewToggle table={asTable} onChange={setAsTable} />}
       </div>
       {asTable && table ? <DataTable inline head={table.head} rows={table.rows} /> : children}
     </section>
@@ -176,7 +176,7 @@ function HBars({ rows, unit, note }: { rows: { label: string; value: number; kin
         <div key={r.label} className="grid grid-cols-[minmax(80px,38%)_1fr_auto] items-center gap-2 text-[13px]"
           onMouseMove={(e) => { const b = ref.current!.getBoundingClientRect(); setTip({ x: e.clientX - b.left, y: e.clientY - b.top, body: <><b>{r.label}</b>{r.kind === 'por confirmar' && ' · por confirmar'}<br />{r.shown ?? r.value} {unit}</> }) }}>
           <span className={cn('truncate', r.kind === 'marca' ? 'font-medium text-text' : 'text-text-2')} title={r.label}>{r.label}</span>
-          <span className="h-3 rounded-r-[4px]" style={{ width: `${Math.max(2, (r.value / max) * 100)}%`, background: fill(r.kind) === 'transparent' ? 'transparent' : fill(r.kind), border: r.kind === 'por confirmar' ? '2px dashed var(--viz-rival)' : undefined }} />
+          <span className="anim-fill h-3 rounded-r-[4px]" style={{ width: `${Math.max(2, (r.value / max) * 100)}%`, background: fill(r.kind) === 'transparent' ? 'transparent' : fill(r.kind), border: r.kind === 'por confirmar' ? '2px dashed var(--viz-rival)' : undefined }} />
           <span className="text-xs text-text-2 tabular-nums">{r.shown ?? r.value}</span>
         </div>
       ))}

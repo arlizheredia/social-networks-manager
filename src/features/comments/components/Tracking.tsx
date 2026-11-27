@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { collapseRows } from '@/lib/motion'
 import { useNavigate } from 'react-router-dom'
-import { Banner, Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, NumberField, Popover, Select, Textarea, confirmBox, toast } from '@/components/ui'
+import { SkeletonList, Banner, Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, NumberField, Popover, Select, Textarea, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText } from '@/lib/util'
 import { useExtension } from '@/features/extension/bridge'
@@ -120,13 +121,13 @@ function PostsCard({ onTrack }: { onTrack: (ids: string[]) => void }) {
             <input type="checkbox" aria-label="Seleccionar todas" className="ml-[13px] size-4 shrink-0 accent-[var(--primary)]" checked={list.length > 0 && list.every((p) => sel.has(p.id))} onChange={(e) => setSel(e.target.checked ? new Set(list.map((p) => p.id)) : new Set())} />
             <div className="min-w-40 flex-1"><Input icon="search" className="!h-10" placeholder="Buscar publicación" value={q} onChange={(e) => setQ(e.target.value)} /></div>
             {ids.length > 0 && <>
-              <Button size="sm" variant="text" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar publicaciones?', `Se quitarán ${ids.length} de la lista. Los comentarios ya guardados se conservan en los seguimientos.`, 'Eliminar', true)) { await deletePosts(ids); setSel(new Set()) } }}>Eliminar</Button>
+              <Button size="sm" variant="text" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar publicaciones?', `Se quitarán ${ids.length} de la lista. Los comentarios ya guardados se conservan en los seguimientos.`, 'Eliminar', true)) { await collapseRows(ids); await deletePosts(ids); setSel(new Set()) } }}>Eliminar</Button>
               <Button size="sm" icon="track_changes" onClick={() => onTrack(ids)}>Crear seguimiento ({ids.length})</Button>
             </>}
           </div>
           <div className="max-h-96 overflow-y-auto rounded-2xl border border-outline-2">
             {list.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 border-b border-outline-2 px-3 py-2 last:border-0">
+              <div key={p.id} data-row-id={p.id} className="flex items-center gap-3 border-b border-outline-2 px-3 py-2 last:border-0">
                 <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={sel.has(p.id)} onChange={(e) => { const s = new Set(sel); e.target.checked ? s.add(p.id) : s.delete(p.id); setSel(s) }} />
                 <i className={cn('size-2.5 shrink-0 rounded-full', PDOT[p.platform])} title={platName(p.platform)} />
                 <div className="min-w-0 flex-1"><div className="truncate">{postLabel(p)}</div><div className="truncate text-xs text-text-2">{platName(p.platform)}{p.author ? ' · ' + p.author : ''} · <a href={p.url} target="_blank" rel="noopener">{p.url.replace(/^https?:\/\/(www\.)?/, '')}</a></div></div>
@@ -149,7 +150,7 @@ function TrackCard({ t, onEdit }: { t: T; onEdit: () => void }) {
   const [ic, label] = ST_TXT[t.status]
   const isRun = running === t.id
   return (
-    <div className="rounded-3xl border border-outline-2 bg-surface">
+    <div data-row-id={t.id} className="rounded-3xl border border-outline-2 bg-surface">
       <button className="flex w-full items-center gap-3 p-4 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
         <Icon name={ic} className={cn('text-primary', isRun && 'animate-spin')} />
         <div className="min-w-0 flex-1">
@@ -171,7 +172,7 @@ function TrackCard({ t, onEdit }: { t: T; onEdit: () => void }) {
             <Button variant="outlined" icon="summarize" disabled={!pr.comments} onClick={() => nav(`/informes?t=${t.id}`)}>Crear informe</Button>
             {!isRun && <Button variant="text" icon="edit" onClick={onEdit}>Editar</Button>}
             {!isRun && t.status !== 'done' && <Button variant="text" icon="inventory_2" onClick={() => finishTracking(t)}>Finalizar y archivar</Button>}
-            {!isRun && <Button variant="text" icon="delete" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar el seguimiento?', 'Se borrarán sus resultados. Los comentarios de una publicación solo se borran si ningún otro seguimiento los usa.', 'Eliminar', true)) deleteTracking(t.id) }}>Eliminar</Button>}
+            {!isRun && <Button variant="text" icon="delete" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar el seguimiento?', 'Se borrarán sus resultados. Los comentarios de una publicación solo se borran si ningún otro seguimiento los usa.', 'Eliminar', true)) { await collapseRows([t.id]); deleteTracking(t.id) } }}>Eliminar</Button>}
           </div>
           <div className="space-y-1">
             {t.postIds.map((id) => {
@@ -206,7 +207,7 @@ export function TrackingPanel() {
   const [dlg, setDlg] = useState<{ open: boolean; ids: string[]; edit: T | null }>({ open: false, ids: [], edit: null })
   const [extOpen, setExtOpen] = useState(false)
   const active = tracks.filter((t) => t.status !== 'done')
-  if (!loaded) return <p className="text-text-2">Cargando…</p>
+  if (!loaded) return <SkeletonList rows={3} />
   return (
     <div className="space-y-4">
       {!ext && <Banner tone="warn" icon="extension_off" action={<Button size="sm" onClick={() => setExtOpen(true)}>Instalar</Button>}>Para extraer automáticamente los comentarios necesitas la <b>extensión de Chrome</b>.</Banner>}

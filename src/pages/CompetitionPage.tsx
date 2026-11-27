@@ -147,7 +147,7 @@ export default function CompetitionPage() {
     <div>
       <PageHead title="Competencia" sub={<>Informes de la competencia de <b className="font-medium">{brand}</b> en las provincias del oriente, con lo que dicen tus seguimientos de comentarios.</>} />
       <Tabs value={tab} onChange={setTab} tabs={[{ id: 'new', label: running ? `Nuevo informe · ${runPct} %` : 'Nuevo informe', icon: running ? 'progress_activity' : 'radar' }, { id: 'comps', label: researching ? 'Competidores · buscando…' : 'Competidores', icon: researching ? 'progress_activity' : 'storefront', badge: nComps || undefined }]} />
-      {tab === 'new' ? <NewReport brand={brand} /> : <CompetitorsTab brand={brand} />}
+      <div key={tab} className="anim-page">{tab === 'new' ? <NewReport brand={brand} /> : <CompetitorsTab brand={brand} />}</div>
       <p className="mt-4 flex items-center gap-1 text-xs text-text-2"><Icon name="history" className="!text-[16px]" />Los informes quedan en Historial › Competencia, donde puedes crear consolidados.</p>
     </div>
   )

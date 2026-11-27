@@ -1,3 +1,4 @@
+import { flashCopied } from './motion'
 /** Utilidades compartidas por todos los módulos. */
 
 export const uid = () => (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36))
@@ -15,8 +16,10 @@ export function download(name: string, data: BlobPart, type = 'application/octet
 }
 
 export async function copyText(text: string): Promise<boolean> {
+  const btn = typeof document !== 'undefined' ? document.activeElement : null // botón pulsado: su icono confirma la copia
   try {
     await navigator.clipboard.writeText(text)
+    flashCopied(btn)
     return true
   } catch {
     const ta = Object.assign(document.createElement('textarea'), { value: text })
@@ -25,16 +28,19 @@ export async function copyText(text: string): Promise<boolean> {
     ta.select()
     const ok = document.execCommand('copy')
     ta.remove()
+    if (ok) flashCopied(btn)
     return ok
   }
 }
 
 /** Copia HTML enriquecido (con alternativa en texto plano), útil para pegar informes en Word o correo. */
 export async function copyRich(html: string, text: string): Promise<boolean> {
+  const btn = typeof document !== 'undefined' ? document.activeElement : null
   try {
     await navigator.clipboard.write([
       new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) }),
     ])
+    flashCopied(btn)
     return true
   } catch {
     return copyText(text)

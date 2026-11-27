@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { reducedMotion } from '@/lib/motion'
 import { cn } from '@/lib/cn'
 import { IconButton } from './Button'
 
@@ -8,11 +9,17 @@ export function Dialog({
   open: boolean; onClose: () => void; title: ReactNode; icon?: ReactNode; children: ReactNode; actions?: ReactNode; wide?: boolean; className?: string
 }) {
   const ref = useRef<HTMLDialogElement>(null)
+  // el contenido sigue montado mientras dura la animación de cierre
+  const [shown, setShown] = useState(open)
   useEffect(() => {
     const d = ref.current
     if (!d) return
-    if (open && !d.open) d.showModal()
-    if (!open && d.open) d.close()
+    if (open) { setShown(true); d.classList.remove('closing'); if (!d.open) d.showModal(); return }
+    if (!d.open) { setShown(false); return }
+    if (reducedMotion()) { d.close(); setShown(false); return }
+    d.classList.add('closing')
+    const t = setTimeout(() => { d.classList.remove('closing'); d.close(); setShown(false) }, 140)
+    return () => clearTimeout(t)
   }, [open])
   return (
     <dialog
@@ -25,7 +32,7 @@ export function Dialog({
         className,
       )}
     >
-      {open && (
+      {(open || shown) && (
         <div className="flex max-h-[calc(100dvh-32px)] flex-col">
           <div className="flex items-center gap-3 px-6 pt-5 pb-3">
             {icon}
