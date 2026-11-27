@@ -4,7 +4,6 @@ export interface NavItem { to: string; label: string; icon: string; short?: stri
 export const NAV: NavItem[] = [
   { to: '/', label: 'Inicio', icon: 'home' },
   { to: '/publicar', label: 'Publicar', icon: 'send' },
-  { to: '/grupos', label: 'Grupos', icon: 'group' },
   { to: '/comentarios', label: 'Comentarios', icon: 'forum', short: 'Coment.' },
   { to: '/informes', label: 'Informes', icon: 'summarize' },
   { to: '/competencia', label: 'Competencia', icon: 'radar', short: 'Compet.' },

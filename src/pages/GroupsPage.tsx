@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { collapseRows } from '@/lib/motion'
+import { PublishTabs } from './PublishTabs'
 import { Banner, Button, Card, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, PageHead, Popover, Switch, Textarea, Toggle, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText, download, fmtRelative } from '@/lib/util'
@@ -173,7 +175,8 @@ export default function GroupsPage() {
     setPub((s) => ({ groups: s.groups.map((g) => (idsOn.includes(g.id) ? { ...g, active: on } : g)) }))
     if (on) { const sel = computeSel(usePublisherState()); idsOn.forEach((i) => sel.add(i)); saveSel(sel) }
   }
-  const del = (dids: string[]) => {
+  const del = async (dids: string[]) => {
+    await collapseRows(dids)
     const removed = groups.filter((g) => dids.includes(g.id))
     const undo = deleteGroups(dids)
     setChecked(new Set())
@@ -183,7 +186,7 @@ export default function GroupsPage() {
   const [undo, setUndo] = useState<(() => void) | null>(null)
 
   const renderRow = (g: Group) => (
-            <div key={g.id} className={cn('flex items-center gap-3 border-b border-outline-2 px-4 py-2.5 last:border-0', !g.active && 'opacity-60')}>
+            <div key={g.id} data-row-id={g.id} className={cn('flex items-center gap-3 border-b border-outline-2 px-4 py-2.5 last:border-0', !g.active && 'opacity-60')}>
               <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={checked.has(g.id)} onChange={(e) => { const s = new Set(checked); e.target.checked ? s.add(g.id) : s.delete(g.id); setChecked(s) }} aria-label={`Seleccionar ${g.name}`} />
               <span className="hidden size-9 shrink-0 place-items-center rounded-full bg-primary-container text-xs font-medium text-on-primary-container sm:grid">{initials(g.name)}</span>
               <div className="min-w-0 flex-1">
@@ -208,7 +211,7 @@ export default function GroupsPage() {
   }
   return (
     <div>
-      <PageHead title="Grupos" sub="Gestiona los grupos de Facebook donde compartes. Solo los grupos activos aparecen como destino."
+      <PageHead title="Publicar en grupos" sub="Gestiona los grupos de Facebook donde compartes. Solo los grupos activos aparecen como destino."
         actions={<>
           <Button variant="outlined" icon="summarize" onClick={() => setRep(true)} disabled={!groups.length}>Reporte</Button>
           <Button icon="add" onClick={() => setEdit({ open: true, g: null })}>Añadir grupo</Button>
@@ -220,6 +223,7 @@ export default function GroupsPage() {
             </>}
           </Popover>
         </>} />
+      <PublishTabs />
 
       <Card filled className="mb-4">
         <div className="flex flex-wrap items-center gap-4">

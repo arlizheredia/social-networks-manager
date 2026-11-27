@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { PublishTabs } from './PublishTabs'
 import { Banner, Button, Card, CardHead, IconButton, Input, PageHead, Select, toast, confirmBox } from '@/components/ui'
 import { useExtension } from '@/features/extension/bridge'
 import { parseFbUrl } from '@/features/publisher/fb'
@@ -82,14 +83,26 @@ export default function PublishPage() {
       <PageHead
         title="Publicar en grupos"
         sub="Prepara tu publicación una vez y compártela en todos tus grupos en unos minutos."
-        actions={<Button variant="outlined" icon="note_add" onClick={() => { clearForm(); toast('Formulario vacío. Tus grupos y la selección se conservan.') }}>Nueva publicación</Button>}
+        actions={<Button variant="outlined" icon="note_add" onClick={() => { clearForm(); toast('Formulario vacío. Tus grupos y la selección se conservan.') }}>Vaciar formulario</Button>}
       />
+      <PublishTabs />
       <div className="mb-4 space-y-3">
         <ResumeBanners />
+        {(() => {
+          // sin grupos (o todos desactivados) no se puede publicar: se avisa arriba con acceso directo a gestionarlos
+          const total = state.groups.length, act = state.groups.filter((g) => g.active).length
+          if (total && act) return null
+          return (
+            <Banner tone="warn" icon="group_off" action={<Link to="/publicar/grupos"><Button size="sm" icon="group">Gestionar grupos</Button></Link>}>
+              <b>{total ? 'Todos tus grupos están desactivados' : 'Aún no tienes grupos'}</b>
+              <div className="text-xs">{total ? `Tienes ${total} ${total === 1 ? 'grupo' : 'grupos'}, pero ninguno activo: actívalos para usarlos como destino.` : 'Para publicar necesitas al menos un grupo de Facebook como destino. Añádelos uno a uno o captúralos desde Facebook.'}</div>
+            </Banner>
+          )
+        })()}
         {locked && <Banner tone="warn" icon="shield"><b>Publicación en pausa para proteger tu cuenta</b><div className="text-xs">{state.lockMsg ? `Motivo: ${state.lockMsg}. ` : 'Se detectó un aviso de Facebook. '}Podrás volver a publicar a partir de {hhmm(state.lock!)}.</div></Banner>}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           <Card>
             <CardHead step={1} title="Publicación de origen" sub="La publicación de Facebook que quieres difundir (opcional si solo publicas contenido nuevo)" />

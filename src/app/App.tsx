@@ -33,7 +33,9 @@ export function App() {
           <Route element={<Layout />}>
             <Route index element={<Home />} />
             <Route path="publicar" element={<Publish />} />
-            <Route path="grupos" element={<Groups />} />
+            <Route path="publicar/grupos" element={<Groups />} />
+            {/* Grupos ahora es una pestaña de Publicar: la dirección antigua sigue funcionando */}
+            <Route path="grupos" element={<Navigate to="/publicar/grupos" replace />} />
             <Route path="comentarios/*" element={<Comments />} />
             <Route path="informes" element={<Reports />} />
             <Route path="competencia" element={<Competition />} />

@@ -126,7 +126,14 @@ export async function startRun(fromHistId?: string) {
     const r = parseFbUrl(draft.url)
     if (r.error) { toast('La URL de origen no es válida'); return }
     const groups = selectedGroups().filter((g) => !isRecent(g))
-    if (!groups.length) { toast('Selecciona al menos un grupo disponible'); return }
+    if (!groups.length) {
+      const all = getPub().groups, act = all.filter((g) => g.active)
+      const go = { label: 'Gestionar grupos', href: '#/publicar/grupos' }
+      if (!all.length) toast('No tienes grupos: añade al menos uno para poder publicar', 'warning', go)
+      else if (!act.length) toast('Todos tus grupos están desactivados: activa al menos uno para publicar', 'warning', go)
+      else toast('Selecciona al menos un grupo disponible en «Destinos»', 'warning')
+      return
+    }
     if (!r.url && !draft.text.trim() && !useMedia.getState().items.length) { toast('Añade una URL, texto o archivos'); return }
     const entry: HistoryEntry = {
       id: uid().slice(0, 36), date: Date.now(), ...(draft.name?.trim() ? { name: draft.name.trim() } : {}), url: r.url || '', text: draft.text, mediaCount: useMedia.getState().items.length,

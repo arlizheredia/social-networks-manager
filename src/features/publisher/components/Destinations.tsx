@@ -11,13 +11,13 @@ export function Destinations() {
   if (!state.groups.length) return (
     <Empty icon={<Icon name="group" />} title="Aún no has añadido grupos">
       <p>Añádelos uno a uno o captúralos todos desde Facebook con el marcador.</p>
-      <Link to="/grupos"><Button className="mt-3" icon="add">Añadir grupos</Button></Link>
+      <Link to="/publicar/grupos"><Button className="mt-3" icon="add">Añadir grupos</Button></Link>
     </Empty>
   )
   if (!act.length) return (
     <Empty icon={<Icon name="group" />} title="No hay grupos activos">
       <p>Tienes {state.groups.length} grupo(s), pero todos están desactivados.</p>
-      <Link to="/grupos"><Button className="mt-3" variant="tonal">Gestionar grupos</Button></Link>
+      <Link to="/publicar/grupos"><Button className="mt-3" variant="tonal">Gestionar grupos</Button></Link>
     </Empty>
   )
   const avail = act.filter((g) => !isRecent(g))
@@ -62,7 +62,7 @@ export function Destinations() {
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-text-2">
-        <Link to="/grupos" className="inline-flex items-center gap-1"><Icon name="edit" className="!text-[16px]" />Gestionar grupos</Link>
+        <Link to="/publicar/grupos" className="inline-flex items-center gap-1"><Icon name="edit" className="!text-[16px]" />Gestionar grupos</Link>
         {act.length > avail.length && <span className="inline-flex items-center gap-1"><Icon name="lock_clock" className="!text-[16px]" />{act.length - avail.length} grupo(s) en espera de 24 h</span>}
       </div>
     </div>
