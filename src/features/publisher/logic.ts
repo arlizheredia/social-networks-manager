@@ -111,6 +111,8 @@ export function postLabel(h: Pick<HistoryEntry, 'url' | 'text'>) {
   return t ? `${h.url ? k : 'Publicación'} «${t}»` : h.url ? `${k} ${contentIds(h.url).values().next().value || ''}`.trim() : 'Publicación sin texto'
 }
 
-export const entryTitle = (h: HistoryEntry) => (h.text || '').trim().split('\n')[0] || h.url || 'Publicación sin texto'
+export const entryTitle = (h: HistoryEntry) => h.name?.trim() || (h.text || '').trim().split('\n')[0] || h.url || 'Publicación sin texto'
+/** Cómo se cita la publicación en los informes: su nombre (si lo tiene) y el enlace. */
+export const entryRef = (h: HistoryEntry) => (h.name?.trim() ? `«${h.name.trim()}»${h.url ? ' · ' + h.url : ''}` : h.url || 'Publicación sin enlace')
 export const awaitingItems = (history: HistoryEntry[]) =>
   history.flatMap((h) => h.items.map((i, idx) => ({ h, i, idx })).filter(({ i }) => i.status === 'done' && i.review === 'awaiting'))

@@ -85,7 +85,7 @@ export function cleanHistory(list: unknown): HistoryEntry[] {
     if (!items.length) return []
     const u = parseFbUrl(str(h.url, 2000))
     return [{
-      id: okId(h.id) || uid().slice(0, 36), date: okTs(h.date) || Date.now(), url: u.url || '', text: str(h.text, 63206),
+      id: okId(h.id) || uid().slice(0, 36), date: okTs(h.date) || Date.now(), ...(str(h.name, 120).trim() ? { name: str(h.name, 120).trim() } : {}), url: u.url || '', text: str(h.text, 63206),
       mediaCount: clamp(h.mediaCount, 0, 999, 0), appendUrl: h.appendUrl !== false, items, ack: h.ack === true,
     }]
   }).slice(0, 300)
@@ -102,7 +102,7 @@ export interface PublisherState {
   history: HistoryEntry[]
   templates: Template[]
   settings: PubSettings
-  draft: { url: string; text: string }
+  draft: { url: string; text: string; name: string }
   /** Grupos seleccionados como destino y activos conocidos al guardar (los nuevos activos se seleccionan solos). */
   sel: { ids: string[]; known: string[] } | null
   lock: number | null
@@ -113,7 +113,7 @@ export interface PublisherState {
 }
 
 const initial: PublisherState = {
-  groups: [], history: [], templates: [], settings: DEF_SETTINGS, draft: { url: '', text: '' }, sel: null,
+  groups: [], history: [], templates: [], settings: DEF_SETTINGS, draft: { url: '', text: '', name: '' }, sel: null,
   lock: null, lockMsg: '', runId: null, report: { author: '', brand: '' },
 }
 
@@ -134,7 +134,7 @@ function legacy(): Partial<PublisherState> {
   const d = get('fbp.draft')
   return {
     groups: cleanGroups(groups), history: cleanHistory(get('fbp.history')), templates: cleanTemplates(get('fbp.templates')),
-    settings: cleanSettings(legacySettings(get('fbp.settings'))), draft: { url: str(d?.url, 2000), text: str(d?.text, 63206) },
+    settings: cleanSettings(legacySettings(get('fbp.settings'))), draft: { url: str(d?.url, 2000), text: str(d?.text, 63206), name: '' },
     sel: isObj(get('fbp.sel')) ? get('fbp.sel') : null, lock: okTs(get('fbp.lock')), lockMsg: str(get('fbp.lockMsg'), 400),
     report: { author: str(get('fbp.report')?.author, 80), brand: str(get('fbp.report')?.brand, 80) },
   }
@@ -163,6 +163,7 @@ export const usePublisher = create<PublisherState>()(
         ...current, ...p,
         groups: cleanGroups(p.groups), history: cleanHistory(p.history), templates: cleanTemplates(p.templates),
         settings: cleanSettings(p.settings), lock: okTs(p.lock),
+        draft: { url: str(p.draft?.url, 2000), text: str(p.draft?.text, 63206), name: str(p.draft?.name, 120) },
       }
     },
   }),

@@ -1,6 +1,6 @@
 /** Informe diario de difusión y reporte de grupos (texto editable; se exporta a Word o PDF). */
 import { getPub } from './store'
-import { cleanErr, failedItems, reasonOf } from './logic'
+import { cleanErr, entryRef, failedItems, reasonOf } from './logic'
 import { fmtRelative } from '@/lib/util'
 import type { Group, HistoryEntry, HistoryItem } from './types'
 import { groupsByTag } from './groups'
@@ -57,7 +57,7 @@ export function buildDiffusionReport(date: string, ids: string[], meta: { author
   L.push(P.join(' '), '', 'Detalle por publicación')
   E.forEach(({ h, its }, k) => {
     const txt = sharedText(h)
-    L.push(`${k + 1}. ${h.url || 'Publicación sin enlace'}`)
+    L.push(`${k + 1}. ${entryRef(h)}`)
     if (txt) L.push(`Texto: «${clip(txt, 300)}»`)
     L.push(`Grupos en los que se compartió: ${its.filter((i) => i.status === 'done').length}`, '')
   })
@@ -119,7 +119,7 @@ export function buildDiffusionRangeReport(from: string, to: string, ids: string[
   L.push('', 'Detalle por publicación')
   E.forEach(({ h, its }, k) => {
     const txt = sharedText(h), ds = [...new Set(its.map((i) => itemDay(h, i)))].sort()
-    L.push(`${k + 1}. ${h.url || 'Publicación sin enlace'}`)
+    L.push(`${k + 1}. ${entryRef(h)}`)
     if (txt) L.push(`Texto: «${clip(txt, 300)}»`)
     L.push(`Fecha: ${ds.map((d) => cap(shortDay(d))).join(', ')}`)
     L.push(`Grupos en los que se compartió: ${its.filter((i) => i.status === 'done').length}`, '')

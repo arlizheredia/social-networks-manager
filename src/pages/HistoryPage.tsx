@@ -59,6 +59,7 @@ function Entry({ h, onVerify }: { h: HistoryEntry; onVerify: (idx: number) => vo
       <summary className="flex cursor-pointer list-none items-center gap-3 p-4">
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium">{entryTitle(h).slice(0, 90)}</div>
+          {h.name && h.text.trim() && <div className="truncate text-xs text-text-2">{h.text.trim().split('\n')[0].slice(0, 90)}</div>}
           <div className="text-xs text-text-2">{fmtDate(h.date)} · {h.items.length} grupo(s){h.url ? ' · ' + parseFbUrl(h.url).kind : ''}</div>
         </div>
         <div className="hidden flex-wrap gap-1 text-xs sm:flex">
@@ -90,7 +91,8 @@ function Entry({ h, onVerify }: { h: HistoryEntry; onVerify: (idx: number) => vo
         <div className="flex flex-wrap gap-2">
           {!!p && <Button icon="play_arrow" onClick={() => { nav('/publicar'); startRun(h.id) }}>Reanudar ({p})</Button>}
           {!p && !!F.length && <Button icon="refresh" onClick={() => { nav('/publicar'); retryFailed(h.id) }}>Reintentar fallidos ({F.length})</Button>}
-          <Button variant="outlined" icon="content_copy" onClick={() => { setPub({ draft: { url: h.url, text: h.text } }); nav('/publicar'); toast('Contenido cargado en Publicar') }}>Reutilizar contenido</Button>
+          <Button variant="outlined" icon="label" onClick={() => { const n = prompt('Nombre para identificar la publicación en los informes:', h.name || ''); if (n != null) mutateHistory((hs) => { const x = hs.find((y) => y.id === h.id); if (x) { if (n.trim()) x.name = n.trim().slice(0, 120); else delete x.name } }) }}>{h.name ? 'Renombrar' : 'Poner nombre'}</Button>
+          <Button variant="outlined" icon="content_copy" onClick={() => { setPub({ draft: { url: h.url, text: h.text, name: h.name || '' } }); nav('/publicar'); toast('Contenido cargado en Publicar') }}>Reutilizar contenido</Button>
           <Button variant="text" className="!text-error" icon="delete" onClick={() => { const before = usePublisher.getState().history; setPub({ history: before.filter((x) => x.id !== h.id) }); toast('Entrada eliminada') }}>Eliminar</Button>
         </div>
       </div>

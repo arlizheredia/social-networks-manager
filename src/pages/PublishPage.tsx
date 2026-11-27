@@ -93,16 +93,22 @@ export default function PublishPage() {
         <div className="space-y-4">
           <Card>
             <CardHead step={1} title="Publicación de origen" sub="La publicación de Facebook que quieres difundir (opcional si solo publicas contenido nuevo)" />
-            <Input
-              icon="link" type="url" inputMode="url" placeholder="https://www.facebook.com/…/posts/…" value={draft.url} aria-label="URL de la publicación"
-              onChange={(e) => setPub((s) => ({ draft: { ...s.draft, url: e.target.value } }))}
-              onBlur={() => { if (r.url && r.url !== draft.url) setPub((s) => ({ draft: { ...s.draft, url: r.url! } })) }}
-              trail={<>
-                {draft.url && <IconButton size="sm" icon="close" label="Vaciar URL" onClick={() => setPub((s) => ({ draft: { ...s.draft, url: '' } }))} />}
-                <IconButton size="sm" icon="content_paste" label="Pegar URL" onClick={async () => { try { const t = (await navigator.clipboard.readText()).trim(); setPub((s) => ({ draft: { ...s.draft, url: parseFbUrl(t).url || t } })) } catch { toast('Pulsa Ctrl+V para pegar la URL') } }} />
-                <IconButton size="sm" icon="open_in_new" label="Abrir en Facebook" onClick={() => (r.url ? window.open(r.url, '_blank', 'noopener') : toast('Primero introduce una URL válida'))} />
-              </>}
-            />
+            <div className="flex flex-wrap gap-2">
+              <div className="min-w-60 flex-[2]">
+                <Input
+                  icon="link" type="url" inputMode="url" placeholder="https://www.facebook.com/…/posts/…" value={draft.url} aria-label="URL de la publicación"
+                  onChange={(e) => setPub((s) => ({ draft: { ...s.draft, url: e.target.value } }))}
+                  onBlur={() => { if (r.url && r.url !== draft.url) setPub((s) => ({ draft: { ...s.draft, url: r.url! } })) }}
+                  trail={<>
+                    {draft.url && <IconButton size="sm" icon="close" label="Vaciar URL" onClick={() => setPub((s) => ({ draft: { ...s.draft, url: '' } }))} />}
+                    <IconButton size="sm" icon="content_paste" label="Pegar URL" onClick={async () => { try { const t = (await navigator.clipboard.readText()).trim(); setPub((s) => ({ draft: { ...s.draft, url: parseFbUrl(t).url || t } })) } catch { toast('Pulsa Ctrl+V para pegar la URL') } }} />
+                    <IconButton size="sm" icon="open_in_new" label="Abrir en Facebook" onClick={() => (r.url ? window.open(r.url, '_blank', 'noopener') : toast('Primero introduce una URL válida'))} />
+                  </>}
+                />
+              </div>
+              <div className="min-w-40 flex-1"><Input placeholder="Nombre (recomendado)" maxLength={120} value={draft.name} aria-label="Nombre de la publicación"
+                onChange={(e) => setPub((s) => ({ draft: { ...s.draft, name: e.target.value } }))} /></div>
+            </div>
             <div className={`mt-1.5 text-xs ${r.error ? 'text-error' : r.url ? 'text-success' : 'text-text-2'}`}>
               {r.error ? r.error : r.url ? `✓ ${r.kind} de ${r.host}${r.cleaned ? ' · se eliminaron parámetros de rastreo' : ''}` : 'Admite publicaciones, fotos, vídeos, reels y enlaces «Compartir» de Facebook.'}
             </div>

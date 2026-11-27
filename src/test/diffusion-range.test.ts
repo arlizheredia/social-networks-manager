@@ -31,3 +31,13 @@ describe('Informe de difusión por periodo', () => {
     expect(diffusionRangeFileName('2026-11-17', '2026-11-23')).toBe('Informe de difusión en grupos de Facebook-17-11-2026_a_23-11-2026')
   })
 })
+
+describe('Nombre de la publicación en los informes', () => {
+  it('se cita por su nombre y enlace', async () => {
+    const { entryRef, entryTitle } = await import('@/features/publisher/logic')
+    const h = { id: 'a', date: 0, name: 'Combos de Navidad', url: 'https://www.facebook.com/reel/1', text: 'Texto', mediaCount: 0, appendUrl: true, items: [], ack: false }
+    expect(entryRef(h)).toBe('«Combos de Navidad» · https://www.facebook.com/reel/1')
+    expect(entryTitle(h)).toBe('Combos de Navidad')
+    expect(entryRef({ ...h, name: undefined })).toBe('https://www.facebook.com/reel/1')
+  })
+})

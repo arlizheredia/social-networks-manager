@@ -120,7 +120,7 @@ export async function startRun(fromHistId?: string) {
     if (!groups.length) { toast('Selecciona al menos un grupo disponible'); return }
     if (!r.url && !draft.text.trim() && !useMedia.getState().items.length) { toast('Añade una URL, texto o archivos'); return }
     const entry: HistoryEntry = {
-      id: uid().slice(0, 36), date: Date.now(), url: r.url || '', text: draft.text, mediaCount: useMedia.getState().items.length,
+      id: uid().slice(0, 36), date: Date.now(), ...(draft.name?.trim() ? { name: draft.name.trim() } : {}), url: r.url || '', text: draft.text, mediaCount: useMedia.getState().items.length,
       appendUrl: getPub().settings.appendUrl, ack: false,
       items: groups.map((g) => ({ gid: g.id, name: g.name, url: g.url, notes: g.notes || '', status: 'pending', at: null })),
     }
@@ -235,7 +235,7 @@ export async function panicStop() {
 
 /** Vacía el formulario de publicación (los grupos y la selección se conservan). */
 export function clearForm() {
-  setPub({ draft: { url: '', text: '' } })
+  setPub({ draft: { url: '', text: '', name: '' } })
   clearMedia()
 }
 

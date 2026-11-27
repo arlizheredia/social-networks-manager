@@ -51,6 +51,8 @@ export interface HistoryItem {
 export interface HistoryEntry {
   id: string
   date: number
+  /** Nombre para identificar la publicación en el historial y en los informes */
+  name?: string
   url: string
   text: string
   mediaCount: number
