@@ -40,7 +40,7 @@ export function reportHtml(m: ReportModel) {
   H.push('<h2>Resumen</h2>', ...m.summary.map((s) => `<p>${esc(s)}</p>`))
   H.push('<h2>Indicadores</h2><table><thead><tr><th>Indicador</th><th>Actual</th>' + (m.prev ? `<th>Anterior</th><th>Cambio</th>` : '') + '</tr></thead><tbody>' +
     m.cmp.map((r) => `<tr><td>${esc(r.k)}</td><td><b>${r.a == null ? '—' : n(r.a)}</b></td>${m.prev ? `<td>${r.b == null ? '—' : n(r.b)}</td><td class="${r.tone === 'up' ? 'pos' : r.tone === 'down' ? 'neg' : ''}">${esc(r.D)}</td>` : ''}</tr>`).join('') + '</tbody></table>')
-  if (m.prev) H.push(`<p class="muted">Actual: el seguimiento más reciente${m.tracks.length ? ` («${esc(m.tracks[m.tracks.length - 1].name)}»)` : ''}. Comparado con ${esc(m.prevName)}.</p>`)
+  if (m.prev) H.push(`<p class="muted">Actual: los comentarios del periodo${m.tracks.length ? ` en ${m.tracks.length === 1 ? `el seguimiento «${esc(m.tracks[0].name)}»` : `${m.tracks.length} seguimientos`}` : ''}. Comparado con ${esc(m.prevName)}.</p>`)
   // evaluación de la marca por aspecto (solo los aspectos de los que se habla)
   const VERD = { fortaleza: ['+', 'Fortaleza', 'pos'], mixto: ['·', 'A mejorar', ''], debil: ['−', 'Punto débil', 'neg'] } as const
   if (m.aspects.brand.length) {
@@ -61,10 +61,10 @@ export function reportHtml(m: ReportModel) {
     `<h3>${esc(r.name)} — ${n(r.n)} ${r.n === 1 ? 'comentario' : 'comentarios'}</h3>` + r.samples.slice(0, 2).map((c) => quote(c)).join('')).join('') +
     '<p class="muted">Detectado por nombres propios y comparaciones al hablar de compras; revísalo antes de actuar.</p>')
   if (m.evolution.length > 1) {
-    // la base es el seguimiento más reciente; en los demás, entre paréntesis, cuánto cambia la base respecto a ellos
+    // cada día con su cambio respecto al día anterior
     const d = (x: number | undefined, good: 'up' | 'down') => x == null ? '' : x === 0 ? ' <span class="muted">(=)</span>' : ` <span class="${(x > 0) === (good === 'up') ? 'pos' : 'neg'}">(${x > 0 ? '▲ +' : '▼ '}${n(x)})</span>`
-    H.push('<h2>Evolución por seguimiento</h2><p class="muted">Base: el seguimiento más reciente. Entre paréntesis, cuánto cambia la base respecto a cada uno de los anteriores.</p><table><thead><tr><th>Seguimiento</th><th>Fecha y hora</th><th>Comentarios</th><th>Positivos</th><th>Negativos</th></tr></thead><tbody>' +
-      m.evolution.map((e) => `<tr><td>${e.base ? '<b>' : ''}${esc(e.name)}${e.base ? '</b> <span class="muted">(base)</span>' : ''}</td><td>${esc(e.date)}</td><td>${n(e.total)}${d(e.dTotal, 'up')}</td><td>${n(e.pos)}${d(e.dPos, 'up')}</td><td>${n(e.neg)}${d(e.dNeg, 'down')}</td></tr>`).join('') + '</tbody></table>')
+    H.push('<h2>Evolución por día</h2><p class="muted">Comentarios de cada día del periodo, del más reciente al más antiguo. Entre paréntesis, el cambio respecto al día anterior.</p><table><thead><tr><th>Día</th><th>Comentarios</th><th>Positivos</th><th>Negativos</th></tr></thead><tbody>' +
+      m.evolution.map((e) => `<tr><td>${e.base ? '<b>' : ''}${esc(e.name)}${e.base ? '</b> <span class="muted">(último día)</span>' : ''}</td><td>${n(e.total)}${d(e.dTotal, 'up')}</td><td>${n(e.pos)}${d(e.dPos, 'up')}</td><td>${n(e.neg)}${d(e.dNeg, 'down')}</td></tr>`).join('') + '</tbody></table>')
   }
   if (m.posts.length > 1 || (m.posts[0] && m.posts[0].url)) H.push('<h2>Por publicación</h2><table><thead><tr><th>Publicación</th><th>Red</th><th>Comentarios</th><th>Positivos</th><th>Negativos</th></tr></thead><tbody>' + m.posts.map((p) => `<tr><td>${p.url ? `<a href="${esc(p.url)}">${esc(p.label)}</a>` : esc(p.label)}</td><td>${esc(platName(p.platform))}</td><td>${n(p.total)}</td><td class="pos">${n(p.pos)}</td><td class="neg">${n(p.neg)} (${p.negPct} %)</td></tr>`).join('') + '</tbody></table>')
   if (m.topAuthors.length) H.push('<h2>Quién más comenta</h2><ol>' + m.topAuthors.map((a) => `<li>${esc(a.name)} — ${n(a.count)}</li>`).join('') + '</ol>')

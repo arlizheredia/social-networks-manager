@@ -16,22 +16,32 @@ import { canonUrl, detectPlatform, normL, platName } from './text'
 import type { Parsed, Platform, RawComment } from './types'
 
 export interface Sessions { facebook: boolean; instagram: boolean; tiktok: boolean; known: boolean }
-interface TRState { posts: Post[]; tracks: Tracking[]; running: string | null; loaded: boolean; sessions: Sessions; tick: number; /** extracción en segundo plano */ bg?: boolean }
-export const useTR = create<TRState>(() => ({ posts: [], tracks: [], running: null, loaded: false, sessions: { facebook: false, instagram: false, tiktok: false, known: false }, tick: 0 }))
+interface TRState {
+  posts: Post[]; tracks: Tracking[]
+  /** seguimientos en curso (pueden ser varios: se turnan en la ventana de extracción) */
+  runs: string[]
+  /** el primero en curso (compatibilidad) */
+  running: string | null
+  /** seguimientos en curso pasados a segundo plano */
+  bgIds: string[]
+  /** seguimiento que se muestra en la ventana flotante */
+  win: string | null
+  loaded: boolean; sessions: Sessions; tick: number
+}
+export const useTR = create<TRState>(() => ({ posts: [], tracks: [], runs: [], running: null, bgIds: [], win: null, loaded: false, sessions: { facebook: false, instagram: false, tiktok: false, known: false }, tick: 0 }))
 const bump = () => useTR.setState((s) => ({ tick: s.tick + 1, tracks: [...s.tracks] }))
 
-export const ORDER_NAME = { all: 'todos los comentarios', pert: 'comentarios más pertinentes', rec: 'comentarios más recientes' } as const
 export const countTxt = (n: number, one: string, many: string) => `${n.toLocaleString('es')} ${n === 1 ? one : many}`
 
 export async function loadTR() {
   try {
     const [posts, tracks] = await Promise.all([DB.all<Post>('posts'), DB.all<Tracking>('trackings')])
     posts.sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || ''))
-    tracks.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
+    tracks.sort((a, b) => trackTs(b) - trackTs(a))
     // un seguimiento que quedó «en curso» al recargar o cerrar la página pasa a «en pausa» sin perder lo recogido:
     // los comentarios ya extraídos de la publicación en curso se recuperan del punto de control y se guardan como parciales
     const orphans: string[] = []
-    for (const t of tracks) if (t.status === 'running' && useTR.getState().running !== t.id) {
+    for (const t of tracks) if (t.status === 'running' && !useTR.getState().runs.includes(t.id)) {
       t.status = 'paused'; t.interrupted = true
       for (const [pid, i] of Object.entries(t.items)) {
         if (i.status !== 'running') continue
@@ -48,6 +58,8 @@ export async function loadTR() {
       await DB.put('trackings', t)
     }
     if (orphans.length) stopOrphans(orphans)
+    // una sola vez: fecha de extracción e índice para los comentarios guardados antes de existir
+    try { if (!localStorage.getItem('snm.extractedAt.v1')) { await DB.backfillExtractedAt(); localStorage.setItem('snm.extractedAt.v1', '1') } } catch { /* */ }
     useTR.setState({ posts, tracks, loaded: true })
   } catch (e) {
     useTR.setState({ loaded: true })
@@ -157,15 +169,22 @@ export async function deletePosts(ids: string[]) {
 }
 
 /* ---------- Seguimientos ---------- */
-export async function saveTracking(data: { id?: string; name: string; date: string; postIds: string[]; fbOrder: Tracking['fbOrder']; fbLimit: number }) {
+/**
+ * Crea o actualiza un seguimiento. Sus publicaciones se pueden cambiar en cualquier momento: al quitar una, sus
+ * comentarios siguen en la caché (no salen en nuevos informes) y, si se vuelve a añadir, la extracción continúa
+ * desde su índice. El tipo de comentarios a revisar ya no se elige: lo decide la extracción.
+ */
+export async function saveTracking(data: { id?: string; name: string; date?: string; postIds: string[]; fbLimit: number }) {
   const tracks = [...useTR.getState().tracks]
   let t = data.id ? tracks.find((x) => x.id === data.id) : undefined
   if (!t) { t = { id: uid('t_'), createdAt: new Date().toISOString(), status: 'draft', items: {}, name: '', date: '', postIds: [], fbOrder: 'all', fbLimit: 1500 }; tracks.unshift(t) }
-  Object.assign(t, { name: data.name.trim() || 'Seguimiento', date: data.date || todayISO(), postIds: data.postIds, fbOrder: data.fbOrder, fbLimit: data.fbLimit })
+  Object.assign(t, { name: data.name.trim() || 'Seguimiento', date: t.date || data.date || todayISO(), postIds: data.postIds, fbLimit: data.fbLimit })
   data.postIds.forEach((id) => { t!.items[id] ||= { status: 'pending', count: 0 } })
+  // con publicaciones nuevas, un seguimiento completado queda pendiente de extraerlas
+  if (t.status === 'done' && data.postIds.some((id) => t!.items[id].status === 'pending')) t.status = 'paused'
   Object.keys(t.items).forEach((id) => { if (!data.postIds.includes(id)) delete t!.items[id] })
   await DB.put('trackings', t)
-  tracks.sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''))
+  tracks.sort((a, b) => trackTs(b) - trackTs(a))
   useTR.setState({ tracks })
   return t
 }
@@ -193,11 +212,22 @@ export function trackProgress(t: Tracking) {
   const raw = Math.round(((done + frac) / n) * 100)
   return { pct: hasRunning ? Math.min(99, raw) : Math.min(100, raw), done, n: ids.length, comments, errors: ids.filter((id) => t.items[id]?.status === 'error').length }
 }
+/** Última actualización del seguimiento (la última vuelta de extracción), o su creación si aún no se ha extraído. */
+export const trackTs = (t: Tracking) => Date.parse(t.rounds?.[t.rounds.length - 1]?.at || t.finishedAt || t.startedAt || t.createdAt || '') || Date.parse((t.date || '') + 'T12:00:00') || 0
 export function trackWhen(t: Tracking) {
-  const ts = t.finishedAt || t.startedAt || t.createdAt
-  const hm = ts && !isNaN(Date.parse(ts)) ? new Date(ts).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : ''
-  return new Date(t.date + 'T12:00:00').toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + (hm ? ' · ' + hm : '')
+  const ts = trackTs(t)
+  if (!ts) return ''
+  const d = new Date(ts)
+  return d.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
 }
+const dayL = (ts: number) => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+/** ¿El seguimiento tuvo actividad en ese periodo? (desde que se creó hasta su última actualización) */
+export function activeIn(t: Tracking, from?: string, to?: string) {
+  const first = t.createdAt ? dayL(Date.parse(t.createdAt)) : t.date, last = dayL(trackTs(t))
+  return (!from || last >= from) && (!to || first <= to)
+}
+/** Comentarios nuevos en las vueltas de los últimos días. */
+export const newSince = (t: Tracking, days: number) => (t.rounds || []).filter((r) => Date.parse(r.at) >= Date.now() - days * 864e5).reduce((a, r) => a + r.newComments, 0)
 
 /* ---------- Extensión: sesiones y extracción ---------- */
 const CP_TAG = '\u0001sca-cp:'
@@ -289,19 +319,43 @@ function extExtract(url: string, onProgress: (m: Record<string, unknown>) => voi
 }
 
 /* ---------- Motor ---------- */
-const RUN = { stopReq: false, job: null as string | null, halt: null as { post: string; error: string } | null, extCount: 0, retryNow: false }
+/** Control de cada seguimiento en curso (detener, reintentar, trabajo de la extensión, error que lo detuvo). */
+interface Ctl { stopReq: boolean; job: string | null; halt: { post: string; error: string } | null; retryNow: boolean }
+const CTL = new Map<string, Ctl>()
+const ctl = (tid: string) => { let c = CTL.get(tid); if (!c) { c = { stopReq: false, job: null, halt: null, retryNow: false }; CTL.set(tid, c) } return c }
+/* Varios seguimientos pueden estar en curso: se turnan en la ventana de extracción, una publicación cada vez, con la
+   pausa entre publicaciones (y la pausa larga del modo prudente) común a todos. */
+const EXT = { tail: Promise.resolve() as Promise<void>, lastEnd: 0, count: 0 }
+function takeTurn(): Promise<() => void> {
+  let release!: () => void
+  const mine = new Promise<void>((res) => { release = res })
+  const prev = EXT.tail
+  EXT.tail = prev.then(() => mine)
+  return prev.then(() => release)
+}
+const setRuns = (f: (ids: string[]) => string[]) => useTR.setState((s) => { const runs = f(s.runs); return { runs, running: runs[0] ?? null, bgIds: s.bgIds.filter((x) => runs.includes(x)) } })
+/**
+ * Pasa un seguimiento a segundo plano (su tarjeta queda arriba a la derecha) o lo trae a la ventana flotante; el que
+ * estaba en la ventana y sigue en curso pasa a segundo plano.
+ */
+export const setTrackBg = (tid: string, bg: boolean) => useTR.setState((s) => bg
+  ? { bgIds: [...new Set([...s.bgIds, tid])] }
+  : { win: tid, bgIds: [...new Set([...s.bgIds.filter((x) => x !== tid), ...(s.win && s.win !== tid && s.runs.includes(s.win) ? [s.win] : [])])] })
+/** Cierra la ventana flotante (si sigue en curso, pasa a segundo plano). */
+export const closeTrackWin = () => useTR.setState((s) => (s.win && s.runs.includes(s.win) ? { bgIds: [...new Set([...s.bgIds, s.win])] } : { win: null }))
 const NO_RETRY = /no está instalada|Enlace no admitido|no admitido|no responde\. Instálala/i
 const isRetryable = (e: Error) => !!e && e.name !== 'AbortError' && !NO_RETRY.test(e.message || '')
 const isFatal = (e: Error) => /no está instalada|no responde\. Instálala/i.test(e?.message || '')
 const retryDelay = (n: number, base: number) => Math.min(300000, base * 1000 * Math.pow(2, n - 1))
-export const retryNow = () => { RUN.retryNow = true }
+export const retryNow = (tid = useTR.getState().running) => { if (tid) ctl(tid).retryNow = true }
 
 function uniqueIds(parsed: Parsed, postId: string) {
   const fix = (v: string) => (v && /^(x|local)-/.test(v) ? postId + '-' + v : v)
   parsed.comments.forEach((c) => { c.id = fix(String(c.id || '')); if (c.parentId) c.parentId = fix(String(c.parentId)) })
   return parsed
 }
-async function storeResult(t: Tracking, p: Post, parsed: Parsed, method: string, partial: boolean) {
+/** Guarda lo extraído en la caché de la publicación; devuelve cuántos comentarios son nuevos. */
+async function storeResult(t: Tracking, p: Post, parsed: Parsed, method: string, partial: boolean): Promise<number> {
   uniqueIds(parsed, p.id)
   const meta = { ...parsed.meta, platform: parsed.meta.platform || p.platform, url: parsed.meta.url || p.url }
   let comments = parsed.comments
@@ -310,20 +364,47 @@ async function storeResult(t: Tracking, p: Post, parsed: Parsed, method: string,
     const seen = new Set(comments.map(resKey)), kept = prev.comments.filter((c) => !seen.has(resKey(c)))
     if (kept.length) comments = comments.concat(kept)
   }
-  await DB.saveResult({ key: t.id + '|' + p.id, tid: t.id, postId: p.id, date: t.date, meta, extractedAt: new Date().toISOString(), method, partial: !!partial }, comments)
-  Object.assign(t.items[p.id], { status: 'done', count: comments.length, saved: comments.length, method, finishedAt: new Date().toISOString(), partial: !!partial, error: '' })
+  const { fresh, total } = await DB.saveResult({ key: t.id + '|' + p.id, tid: t.id, postId: p.id, date: t.date, meta, extractedAt: new Date().toISOString(), method, partial: !!partial }, comments, { cursor: !partial })
+  const it = t.items[p.id]
+  Object.assign(it, { status: 'done', count: total, saved: total, newCount: (it.newCount || 0) + fresh, method, finishedAt: new Date().toISOString(), partial: !!partial, error: '' })
   let ch = false
   if (meta.title && !p.title) { p.title = String(meta.title).replace(/\s+/g, ' ').slice(0, 140); ch = true }
   if (meta.postAuthor && !p.author) { p.author = meta.postAuthor; ch = true }
   if (ch) await updatePost(p)
+  return fresh
 }
 
-async function collectPost(t: Tracking, p: Post, it: TrackItem, onProg: (u: Record<string, unknown>) => void) {
+/**
+ * Cómo extraer una publicación (lo decide la app, no el usuario). El máximo de la preferencia es un CUPO POR EXTRACCIÓN:
+ * cada vez que se inicia o se continúa el seguimiento, cada publicación trae como mucho esos comentarios (o los que le
+ * queden, si son menos); después el proceso se detiene solo hasta que se pulse continuar.
+ * - Primera vez: todos los comentarios, hasta el cupo.
+ * - Quedan comentarios antiguos por extraer (la red tiene más que los guardados): se sigue el orden de «todos» desde
+ *   donde se quedó (los ya guardados más el cupo).
+ * - Al día: los más recientes en una ventana que basta para llegar a los ya guardados (índice); si toda la ventana son
+ *   comentarios nuevos, se amplía (sin pasar del cupo). Instagram y TikTok no permiten ordenar: se recorren y se suman
+ *   los nuevos.
+ */
+export interface Plan { mode: 'full' | 'catch' | 'inc'; fb: { order: 'all' | 'rec'; limit: number } | null; quota: number }
+export const INC_WINDOW = 150
+export function planFor(p: Pick<Post, 'platform'>, st: { known: number; total?: number | null }, policy: number, window = INC_WINDOW): Plan {
+  const quota = policy   // 0 = sin límite
+  if (!st.known) return { mode: 'full', fb: { order: 'all', limit: quota }, quota }
+  const backlog = !!st.total && st.known < st.total * 0.97
+  if (backlog || p.platform !== 'facebook') return { mode: backlog ? 'catch' : 'inc', fb: { order: 'all', limit: quota ? st.known + quota : 0 }, quota }
+  return { mode: 'inc', fb: { order: 'rec', limit: quota ? Math.min(quota, window) : window }, quota }
+}
+/** Con «al día»: ¿hay que ampliar la ventana? (todo lo leído era nuevo y se llegó al tope de la ventana, sin pasar del cupo) */
+export const needsWider = (plan: Plan, got: number, overlap: number) =>
+  plan.mode === 'inc' && plan.fb?.order === 'rec' && overlap === 0 && got >= plan.fb.limit && (!plan.quota || plan.fb.limit < plan.quota)
+
+async function collectPost(t: Tracking, p: Post, it: TrackItem, onProg: (u: Record<string, unknown>) => void, plan?: Plan) {
   if (!useExtension.getState().extractor) throw new Error('La extensión de Chrome no está instalada o no responde. Instálala (Ajustes › Extensión) y recarga la página.')
-  const fb = p.platform === 'facebook' ? { order: t.fbOrder || 'all', limit: t.fbLimit ?? 1500 } : null
+  const fb = plan ? plan.fb : p.platform === 'facebook' ? { order: 'all' as const, limit: t.fbLimit ?? 1500 } : null
   it.order = fb ? fb.order : null; it.limit = fb ? fb.limit : 0
   const job = extExtract(p.url, (m) => onProg({ phase: m.phase, count: m.count, total: m.total, note: m.note }), fb)
-  RUN.job = job.jobId
+  const C = ctl(t.id)
+  C.job = job.jobId
   it.jobId = job.jobId
   await DB.put('trackings', t).catch(() => {})
   let ckN = 0
@@ -333,13 +414,13 @@ async function collectPost(t: Tracking, p: Post, it: TrackItem, onProg: (u: Reco
   }, 4000)
   let r: ExtResult
   try { r = await job.promise } finally { clearInterval(ck); delete it.jobId; idbDel(ckKey(t.id, p.id), ckStore()).catch(() => {}) }
-  RUN.job = null
+  C.job = null
   if (!r.data && r.acc?.length) r.data = { source: 'social-dom-extractor', platform: p.platform, version: 3, url: p.url, title: p.title || '', comments: r.acc }
   if (r.closed) {
     onProg({ note: 'Se cerró la ventana de extracción: se da por terminada con lo recogido.' })
     return { parsed: r.data ? fromExtractor(r.data) : { meta: { platform: p.platform, url: p.url }, comments: [] }, partial: false }
   }
-  if (r.watchdog && !RUN.stopReq) {
+  if (r.watchdog && !C.stopReq) {
     if (r.data && ((r.data.comments as unknown[]) || []).length) { await storeResult(t, p, fromExtractor(r.data), 'extension', true); Object.assign(it, { status: 'running', partial: true }) }
     throw new Error('La extensión dejó de dar noticias durante varios minutos; se guardó lo recogido y se reintenta.')
   }
@@ -347,7 +428,7 @@ async function collectPost(t: Tracking, p: Post, it: TrackItem, onProg: (u: Reco
   if (!r.data) throw new Error('La extensión no devolvió datos.')
   if (r.data.cambioDePublicacion) onProg({ note: 'La página cambió de publicación durante la extracción; se guardó solo lo de la original.' })
   if (!r.stopped && !((r.data.comments as unknown[]) || []).length) throw Object.assign(new Error('No se encontraron comentarios: la sección de comentarios no se abrió o la red cambió su diseño. Reintenta; si sigue fallando, copia el diagnóstico y envíalo.'), { diag: r.data.diag })
-  return { parsed: fromExtractor(r.data), partial: !!r.stopped, stopped: !!r.stopped && RUN.stopReq }
+  return { parsed: fromExtractor(r.data), partial: !!r.stopped, stopped: !!r.stopped && C.stopReq }
 }
 
 function notifyDesk(title: string, body: string, link?: string) {
@@ -365,18 +446,25 @@ export const historyLink = (tid: string) => `#/historial?tab=seg&t=${encodeURICo
 export async function runTracking(tid: string) {
   try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission() } catch { /* */ }
   const st = useTR.getState()
-  if (st.running) { toast('Ya hay un seguimiento en curso'); return }
+  if (st.runs.includes(tid)) { setTrackBg(tid, false); return }   // ya está en curso: se trae al frente
   const t = st.tracks.find((x) => x.id === tid)
   if (!t) return
+  // el seguimiento es continuo: si la última vuelta terminó, empieza otra (solo traerá los comentarios nuevos)
+  const fresh = t.status === 'done' || t.status === 'draft' || !t.postIds.some((id) => ['pending', 'running', 'error'].includes(t.items[id]?.status))
+  if (fresh) t.postIds.forEach((id) => { const it = (t.items[id] ||= { status: 'pending', count: 0 }); Object.assign(it, { status: 'pending', newCount: 0, error: '', partial: false }); delete it.diag })
   const pend = t.postIds.map((id) => st.posts.find((p) => p.id === id)).filter((p): p is Post => !!p && !['done', 'skipped'].includes(t.items[p.id]?.status))
   if (!useExtension.getState().extractor && pend.length) { toast('Para extraer automáticamente necesitas la extensión de Chrome (Ajustes › Extensión).'); return }
   await refreshSessions()
   const miss = missingAuth(pend)
   if (miss.length) { toast(`Inicia sesión en ${miss.map(platName).join(', ')} en este navegador para iniciar el seguimiento.`); return }
-  Object.assign(RUN, { stopReq: false, halt: null, extCount: 0 })
-  useTR.setState({ running: tid, bg: false })
+  const RUN = ctl(tid)
+  Object.assign(RUN, { stopReq: false, halt: null, retryNow: false, job: null })
+  setRuns((ids) => [...ids, tid])
+  setTrackBg(tid, false)   // se muestra en la ventana flotante; si había otro, pasa a segundo plano
+  if (useTR.getState().runs.length > 1) toast(`Seguimientos en paralelo: ${useTR.getState().runs.length} en curso. Se turnan publicación a publicación en la misma ventana.`, 'stacks')
   delete t.halt; delete t.interrupted
   t.status = 'running'; t.startedAt ||= new Date().toISOString()
+  const roundStart = new Date().toISOString()
   await putTracking(t)
   const opts = extOpts(), gap = opts.gap * 1000
   let last = 0
@@ -387,7 +475,14 @@ export async function runTracking(tid: string) {
     const it = t.items[id], p = useTR.getState().posts.find((x) => x.id === id)
     if (!p) { it.status = 'skipped'; continue }
     if (['done', 'skipped'].includes(it.status)) continue
-    Object.assign(it, { status: 'running', count: 0, total: null, phase: '', error: '', method: 'extension', startedAt: new Date().toISOString() })
+    // plan: todos la primera vez; después, solo los nuevos (a partir del índice de la publicación)
+    const pc = await DB.pc(p.id).catch(() => ({ comments: [] as RawComment[], cursor: undefined }))
+    const knownKeys = new Set(pc.comments.map(resKey))
+    const policy = t.fbLimit ?? 1500
+    let plan = planFor(p, { known: knownKeys.size, total: pc.cursor?.total }, policy)
+    const cupo = plan.quota ? ` · hasta ${plan.quota.toLocaleString('es')} en esta extracción` : ''
+    Object.assign(it, { status: 'running', count: 0, total: null, phase: '', error: '', method: 'extension', mode: plan.mode, startedAt: new Date().toISOString(),
+      note: plan.mode === 'full' ? `Primera vez: se extraen todos los comentarios${cupo}` : plan.mode === 'catch' ? `Continúa con los que faltan (ya hay ${knownKeys.size.toLocaleString('es')})${cupo}` : `Solo los nuevos (ya hay ${knownKeys.size.toLocaleString('es')})${cupo}` })
     bump()
     try {
       let r: Awaited<ReturnType<typeof collectPost>>, attempt = 0
@@ -395,13 +490,41 @@ export async function runTracking(tid: string) {
       for (;;) {
         attempt++; it.attempts = attempt
         try {
-          r = await collectPost(t, p, it, (u) => {
-            if (u.phase) it.phase = u.phase as TrackItem['phase']
-            if (u.count != null) it.count = Number(u.count)
-            if (u.total) it.total = Number(u.total)
-            if (u.note) it.note = String(u.note)
-            save()
-          })
+          // turno en la ventana de extracción (compartida con los demás seguimientos en curso)
+          const busy = useTR.getState().runs.length > 1
+          if (busy) { it.phase = ''; it.note = 'Esperando turno: otro seguimiento está usando la ventana de extracción…'; bump() }
+          const release = await takeTurn()
+          try {
+            if (RUN.stopReq) throw Object.assign(new Error('Detenido'), { name: 'AbortError' })
+            // pausa entre publicaciones, común a todos (±50 %) y, en modo prudente, una pausa larga cada 5 publicaciones
+            let wait = EXT.lastEnd && gap ? EXT.lastEnd + gap * (0.5 + Math.random()) - Date.now() : 0
+            if (opts.careful && EXT.count && EXT.count % 5 === 0) wait += 30000 + Math.random() * 30000
+            const end = Date.now() + Math.max(0, wait)
+            if (wait > 0) { it.note = 'Pausa entre publicaciones…'; bump() }
+            while (!RUN.stopReq && Date.now() < end) await wsleep(Math.min(500, end - Date.now()))
+            if (RUN.stopReq) throw Object.assign(new Error('Detenido'), { name: 'AbortError' })
+            it.note = plan.mode === 'full' ? 'Primera vez: se extraen todos los comentarios' : plan.mode === 'catch' ? 'Continúa con los que faltan' : 'Solo los nuevos'
+            r = await collectPost(t, p, it, (u) => {
+              if (u.phase) it.phase = u.phase as TrackItem['phase']
+              if (u.count != null) it.count = Number(u.count)
+              if (u.total) it.total = Number(u.total)
+              if (u.note) it.note = String(u.note)
+              save()
+            }, plan)
+          } finally { EXT.lastEnd = Date.now(); EXT.count++; release() }
+          // continuación: si todo lo leído era nuevo y se llegó al tope de la ventana, faltan comentarios: se amplía
+          if ('parsed' in r && r.parsed && !('stopped' in r && r.stopped)) {
+            uniqueIds(r.parsed, p.id)
+            const overlap = r.parsed.comments.filter((c) => knownKeys.has(resKey(c))).length
+            if (needsWider(plan, r.parsed.comments.length, overlap) && attempt < opts.retries) {
+              await storeResult(t, p, r.parsed, 'extension', true)
+              r.parsed.comments.forEach((c) => knownKeys.add(resKey(c)))
+              const wider = plan.fb!.limit * 4
+              plan = { ...plan, fb: { ...plan.fb!, limit: plan.quota ? Math.min(plan.quota, wider) : wider } }
+              Object.assign(it, { status: 'running', note: `Hay más comentarios nuevos: ampliando a ${plan.fb!.limit.toLocaleString('es')}…`, count: 0 })
+              continue
+            }
+          }
           delete it.retry
           break
         } catch (err) {
@@ -432,6 +555,8 @@ export async function runTracking(tid: string) {
           it.limitReached = !!res.parsed.meta.order?.alcanzado
           it.diag = res.parsed.meta.diag || null
           await storeResult(t, p, res.parsed, 'extension', res.partial)
+          // ¿quedan comentarios por extraer? (se llegó al cupo de esta extracción y la red tiene más)
+          it.more = !!it.total && (it.count || 0) < it.total * 0.97
         }
       }
     } catch (err) {
@@ -446,32 +571,35 @@ export async function runTracking(tid: string) {
     delete it.retry
     it.phase = ''
     await putTracking(t)
-    if (!RUN.stopReq && t.postIds.some((x) => t.items[x].status === 'pending')) {
-      // pausa variable (±50 %) y, en modo prudente, una pausa larga (30–60 s) cada 5 publicaciones
-      let wait = gap ? gap * (0.5 + Math.random()) : 0
-      if (opts.careful && ++RUN.extCount % 5 === 0) wait += 30000 + Math.random() * 30000
-      const end = Date.now() + wait
-      while (!RUN.stopReq && Date.now() < end) await wsleep(Math.min(500, end - Date.now()))
-    }
   }
 
   const pr = trackProgress(t), left = t.postIds.some((id) => t.items[id].status === 'pending')
+  // registro de la vuelta: cuántas publicaciones se revisaron y cuántos comentarios nuevos aparecieron
+  const touched = t.postIds.filter((id) => (t.items[id]?.finishedAt || '') >= roundStart)
+  if (touched.length) {
+    const newComments = touched.reduce((a, id) => a + (t.items[id].newCount || 0), 0)
+    t.rounds = [...(t.rounds || []), { at: new Date().toISOString(), posts: touched.length, newComments }].slice(-200)
+  }
   if (RUN.halt) { t.status = 'paused'; t.halt = { ...RUN.halt, at: new Date().toISOString() }; toast(`Extracción detenida: «${RUN.halt.post}» falló. Revisa la conexión o la sesión y pulsa Continuar.`) }
   else if (RUN.stopReq || left) { t.status = 'paused'; toast(pr.comments ? `Seguimiento en pausa: ${countTxt(pr.comments, 'comentario guardado', 'comentarios guardados')}. Pulsa Continuar cuando quieras.` : `Seguimiento en pausa: ${pr.done} de ${pr.n} publicaciones`) }
   else if (pr.errors) { t.status = 'paused'; toast(countTxt(pr.errors, 'publicación no se pudo extraer', 'publicaciones no se pudieron extraer') + ': reinténtalas o finaliza el seguimiento') }
-  else { t.status = 'done'; t.finishedAt = new Date().toISOString(); toast(pr.comments ? `✓ Seguimiento «${t.name}» completado: ${countTxt(pr.comments, 'comentario', 'comentarios')}.` : '⚠ El seguimiento terminó sin comentarios: reintenta las publicaciones.', undefined, { label: 'Ver en el historial', href: historyLink(t.id) }) }
+  else {
+    t.status = 'done'; t.finishedAt = new Date().toISOString()
+    const nuevos = t.postIds.reduce((a, id) => a + (t.items[id]?.newCount || 0), 0)
+    toast(pr.comments ? `✓ Seguimiento «${t.name}» actualizado: ${countTxt(nuevos, 'comentario nuevo', 'comentarios nuevos')} · ${countTxt(pr.comments, 'comentario', 'comentarios')} en total.` : '⚠ El seguimiento terminó sin comentarios: reintenta las publicaciones.', undefined, { label: 'Ver en el historial', href: historyLink(t.id) })
+  }
   if (t.status === 'done') notifyDesk('Seguimiento completado', `${t.name}: ${countTxt(pr.comments, 'comentario', 'comentarios')}. Pulsa para verlo en el historial.`, historyLink(t.id))
   else if (RUN.halt) notifyDesk('Extracción detenida', `${t.name}: ${RUN.halt.error}`)
-  useTR.setState({ running: null })
-  Object.assign(RUN, { stopReq: false, halt: null })
+  setRuns((ids) => ids.filter((x) => x !== tid))
+  CTL.delete(tid)
   await putTracking(t)
 }
 
-export function stopTracking(saveToHistory = true) {
-  const tid = useTR.getState().running
-  if (!tid) return
+export function stopTracking(tid = useTR.getState().running, saveToHistory = true) {
+  if (!tid || !useTR.getState().runs.includes(tid)) return
   const t = useTR.getState().tracks.find((x) => x.id === tid)
   if (t && saveToHistory) t.inHist = true
+  const RUN = ctl(tid)
   RUN.stopReq = true
   if (RUN.job) extStop(RUN.job)
   toast('Deteniendo… se guardará lo ya extraído, también lo de la publicación en curso')
@@ -483,11 +611,13 @@ export async function retryItem(t: Tracking, postId: string) {
   await putTracking(t)
 }
 export async function skipItem(t: Tracking, postId: string) { t.items[postId].status = 'skipped'; await putTracking(t) }
+/** Archiva un seguimiento: deja de actualizarse y sale de la lista de activos (conserva sus comentarios). */
 export async function finishTracking(t: Tracking) {
   t.postIds.forEach((id) => { if (t.items[id].status === 'pending' || t.items[id].status === 'error') t.items[id].status = 'skipped' })
-  t.status = 'done'; t.finishedAt ||= new Date().toISOString()
+  t.status = 'done'; t.finishedAt ||= new Date().toISOString(); t.archived = true
   await putTracking(t)
 }
+export async function unarchiveTracking(t: Tracking) { t.archived = false; await putTracking(t) }
 
 /** Añade un comentario (p. ej. una respuesta enviada desde la app) al resultado de un seguimiento. */
 export async function appendToResult(tid: string, postId: string, raw: RawComment) {
@@ -499,19 +629,4 @@ export async function appendToResult(tid: string, postId: string, raw: RawCommen
   const t = useTR.getState().tracks.find((x) => x.id === tid)
   if (t?.items[postId]) { t.items[postId].count = list.length; t.items[postId].saved = list.length; await putTracking(t) }
   return true
-}
-
-/** Comentarios de uno o varios seguimientos, con su contexto (publicación, fecha). */
-export async function gatherComments(tids: string[]): Promise<RawComment[]> {
-  const { tracks, posts } = useTR.getState()
-  const out: RawComment[] = []
-  for (const tid of tids) {
-    const t = tracks.find((x) => x.id === tid)
-    if (!t) continue
-    for (const r of await DB.resultsOf(tid)) {
-      const p = posts.find((x) => x.id === r.postId)
-      ;(r.comments || []).forEach((c) => out.push({ ...c, _ref: { tid, postId: r.postId }, _post: p ? postLabel(p) : r.meta?.title || '', _postUrl: p?.url || r.meta?.url, _date: t.date }))
-    }
-  }
-  return out
 }

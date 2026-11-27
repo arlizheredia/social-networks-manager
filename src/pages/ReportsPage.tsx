@@ -50,11 +50,11 @@ function WhatsAppDialog({ m, open, onClose }: { m: ReportModel; open: boolean; o
 
 function CommentsReport() {
   const [params] = useSearchParams()
-  const { tracks, running } = useTR()
+  const { tracks, runs } = useTR()
   const prefs = usePrefs()
   const aiReady = useAI((s) => s.installed)
   const explore = useExplore()
-  const done = tracks.filter((t) => inHistory(t) && running !== t.id)
+  const done = tracks.filter((t) => inHistory(t) && !runs.includes(t.id))
   const [source, setSource] = useState<'tracks' | 'open'>('tracks')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [opts, setOpts] = useState({ ...prefs.report })
@@ -67,13 +67,18 @@ function CommentsReport() {
     const valid = (prefs.repSel || []).filter((id) => done.some((x) => x.id === id))
     setSel(new Set(t ? t.split(',').filter((id) => done.some((x) => x.id === id)) : valid))
   }, [params, tracks.length]) // eslint-disable-line react-hooks/exhaustive-deps
-  const preset = (days: number | 'all' | 'none') => setSel(new Set(days === 'none' ? [] : done.filter((t) => days === 'all' || new Date(t.date + 'T12:00').getTime() > Date.now() - days * 864e5).map((t) => t.id)))
+  // periodo de los COMENTARIOS (no de los seguimientos): por fecha del comentario o de su extracción
+  const [rng, setRng] = useState<{ from: string; to: string; basis: 'comment' | 'extraction' }>({ from: '', to: '', basis: 'comment' })
+  const dayAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+  const today = dayAgo(0)
+  const presetR = (n: number | null) => setRng({ ...rng, from: n == null ? '' : dayAgo(n), to: n == null ? '' : today })
+  const isPre = (n: number | null) => (n == null ? !rng.from && !rng.to : rng.from === dayAgo(n) && rng.to === today)
   const gen = async () => {
     setErr(''); setProg(`Buscando los comentarios sobre ${focusName(opts.focus)}…`)
     try {
       if (source === 'tracks') setPrefs({ repSel: [...sel] })
       const m = await withTask('Preparando el informe', async (p) => buildReport({
-        tids: source === 'tracks' ? [...sel] : undefined, comments: source === 'open' ? explore.comments : undefined, title: source === 'open' ? explore.meta?.title : undefined,
+        tids: source === 'tracks' ? [...sel] : undefined, range: source === 'tracks' ? { from: rng.from || undefined, to: rng.to || undefined, basis: rng.basis } : undefined, comments: source === 'open' ? explore.comments : undefined, title: source === 'open' ? explore.meta?.title : undefined,
         focus: opts.focus, terms: opts.terms.split(',').map((s) => s.trim()).filter(Boolean), author: opts.author, client: opts.client,
         onProgress: (a, b) => { p(a / b); setProg(`Buscando los comentarios sobre ${focusName(opts.focus)}… ${Math.round((a / b) * 100)} %`) },
       }))
@@ -109,22 +114,39 @@ function CommentsReport() {
       {!aiReady && <div className="mb-4"><NeedsAI what="El informe de comentarios" /></div>}
       <h3 className="mb-2 text-lg">¿De qué comentarios?</h3>
       <div className="mb-3 flex flex-wrap gap-2">
-        <Chip selected={source === 'tracks'} onClick={() => setSource('tracks')}>Seguimientos del historial ({done.length})</Chip>
+        <Chip selected={source === 'tracks'} onClick={() => setSource('tracks')}>Seguimientos ({done.length})</Chip>
         <Chip selected={source === 'open'} onClick={() => setSource('open')}>Los abiertos en «Analizar» ({explore.comments.length})</Chip>
       </div>
       {source === 'tracks' && (done.length ? (
         <>
-          <div className="mb-2 flex flex-wrap gap-2"><Chip onClick={() => preset(7)}>Últimos 7 días</Chip><Chip onClick={() => preset(30)}>Últimos 30 días</Chip><Chip onClick={() => preset('all')}>Todos</Chip><Chip onClick={() => preset('none')}>Ninguno</Chip></div>
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-text-2">Seguimientos: <Chip onClick={() => setSel(new Set(done.map((t) => t.id)))}>Todos</Chip><Chip onClick={() => setSel(new Set())}>Ninguno</Chip></div>
           <div className="mb-4 max-h-72 overflow-y-auto rounded-2xl border border-outline-2">
             {done.map((t) => { const pr = trackProgress(t); return (
               <label key={t.id} className="flex cursor-pointer items-center gap-3 border-b border-outline-2 px-3 py-2 last:border-0 hover:bg-text/4">
                 <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={sel.has(t.id)} onChange={(e) => { const s = new Set(sel); e.target.checked ? s.add(t.id) : s.delete(t.id); setSel(s) }} />
-                <div className="min-w-0"><div className="truncate">{t.name}</div><div className="text-xs text-text-2">{trackWhen(t)} · {countTxt(pr.n, 'publicación', 'publicaciones')} · {countTxt(pr.comments, 'comentario', 'comentarios')}</div></div>
+                <div className="min-w-0"><div className="truncate">{t.name}</div><div className="text-xs text-text-2">Actualizado {trackWhen(t)} · {countTxt(pr.n, 'publicación', 'publicaciones')} · {countTxt(pr.comments, 'comentario', 'comentarios')}</div></div>
               </label>
             ) })}
           </div>
         </>
-      ) : <Empty icon={<Icon name="analytics" />} title="Todavía no hay seguimientos completados">Cuando termines alguno en Comentarios › Seguimiento diario, podrás elegirlo aquí.</Empty>)}
+      ) : <Empty icon={<Icon name="analytics" />} title="Todavía no hay seguimientos completados">Cuando extraigas alguno en Comentarios › Seguimiento, podrás elegirlo aquí.</Empty>)}
+      {source === 'tracks' && done.length > 0 && (
+        <div className="mb-4 rounded-2xl bg-surface-2 p-3">
+          <div className="mb-2 text-sm font-medium">Periodo de los comentarios</div>
+          <div className="mb-2 flex flex-wrap gap-2">
+            <Chip selected={isPre(0)} onClick={() => presetR(0)}>Hoy</Chip>
+            <Chip selected={isPre(6)} onClick={() => presetR(6)}>Últimos 7 días</Chip>
+            <Chip selected={isPre(29)} onClick={() => presetR(29)}>Últimos 30 días</Chip>
+            <Chip selected={isPre(null)} onClick={() => presetR(null)}>Todos</Chip>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-text-2">Desde<Input type="date" className="!h-10" value={rng.from} max={rng.to || undefined} onChange={(e) => setRng({ ...rng, from: e.target.value })} /></label>
+            <label className="text-xs text-text-2">Hasta<Input type="date" className="!h-10" value={rng.to} min={rng.from || undefined} onChange={(e) => setRng({ ...rng, to: e.target.value })} /></label>
+            <label className="text-xs text-text-2">Según la fecha<Select className="!h-10" value={rng.basis} onChange={(e) => setRng({ ...rng, basis: e.target.value as 'comment' | 'extraction' })}><option value="comment">del comentario</option><option value="extraction">de extracción</option></Select></label>
+          </div>
+          <p className="mt-2 text-xs text-text-2">Se analizan los comentarios de ese periodo en las publicaciones actuales de los seguimientos elegidos{rng.from && rng.to ? ', y se comparan con el periodo anterior de la misma duración' : ''}. «De extracción» es el día en que la app vio el comentario por primera vez (útil para el informe diario de lo nuevo).</p>
+        </div>
+      )}
       {source === 'open' && !explore.comments.length && <p className="mb-4 text-text-2">No hay comentarios abiertos. Ábrelos en Comentarios › Analizar y responder.</p>}
       <div className="grid gap-x-4 sm:grid-cols-2">
         <Field label="Enfoque del informe" hint="La IA buscará los comentarios que cumplen este criterio. Déjalo vacío para analizarlos todos."><Input value={opts.focus} onChange={(e) => setOpts({ ...opts, focus: e.target.value })} /></Field>

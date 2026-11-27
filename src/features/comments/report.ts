@@ -2,7 +2,7 @@
 import { DB, normName, postLabel } from './db'
 import { finalize } from './normalize'
 import { getPrefs } from './prefs'
-import { trackWhen, useTR } from './tracking'
+import { useTR } from './tracking'
 import { computeStats, computeTeam, detectRivals, fkey, focusFilter, focusMatch, focusName, focusSubj, reportOpinions, sentOf, type Stats } from './analysis'
 import type { Comment, Platform, RawComment } from './types'
 import { ASPECTS, evaluateAspects, type AspectEval } from './aspects'
@@ -11,8 +11,6 @@ import type { Tracking } from './db'
 
 const fmtN = (n: number) => (n ?? 0).toLocaleString('es')
 export const countTxt = (n: number, one: string, many: string) => `${fmtN(n)} ${n === 1 ? one : many}`
-/** Momento del seguimiento (para ordenar varios del mismo día). */
-const whenTs = (t: Tracking) => Date.parse(t.finishedAt || t.startedAt || t.createdAt || '') || 0
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0)
 
 export interface Snapshot { list: Comment[]; st: Stats; s: ReturnType<typeof sentOf>; authorsN: number }
@@ -53,17 +51,42 @@ export interface ReportModel {
   recommendations: string[]
 }
 
-/** Comentarios de varios seguimientos, sin duplicar los de una misma publicación. */
-export async function gather(tids: string[]) {
+/** Periodo de los comentarios de un informe y qué fecha se usa: la del comentario o la de su extracción. */
+export interface Range { from?: string; to?: string; basis?: 'comment' | 'extraction' }
+const localDay = (iso: string) => { const d = new Date(iso); return isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+/** Día de un comentario según la base elegida (con la otra fecha como respaldo si falta). */
+export function dayOf(c: RawComment, basis: Range['basis'] = 'comment') {
+  const cr = typeof c.createdAt === 'string' ? c.createdAt : '', ex = typeof c.extractedAt === 'string' ? c.extractedAt : ''
+  return localDay(basis === 'extraction' ? ex || cr : cr || ex)
+}
+const addDays = (day: string, n: number) => { const d = new Date(day + 'T12:00:00'); d.setDate(d.getDate() + n); return localDay(d.toISOString()) }
+/** Periodo inmediatamente anterior y de la misma duración (para comparar). */
+export function prevRange(r: Range): Range | null {
+  if (!r.from || !r.to) return null
+  const len = Math.round((Date.parse(r.to + 'T12:00:00') - Date.parse(r.from + 'T12:00:00')) / 864e5) + 1
+  return { from: addDays(r.from, -len), to: addDays(r.from, -1), basis: r.basis }
+}
+
+/**
+ * Comentarios de varios seguimientos: los de sus publicaciones actuales (la caché de cada publicación es común a todos
+ * los seguimientos que la incluyen), sin duplicar, y solo los del periodo pedido. Una publicación quitada de un
+ * seguimiento conserva sus comentarios en la caché, pero ya no aparece en sus informes.
+ */
+export async function gather(tids: string[], range: Range = {}) {
   const { tracks, posts } = useTR.getState()
   const out = new Map<string, RawComment>(), plat: Record<string, number> = {}
-  const ts = tids.map((id) => tracks.find((t) => t.id === id)).filter((t): t is Tracking => !!t).sort((a, b) => a.date.localeCompare(b.date) || whenTs(a) - whenTs(b))
+  const ts = tids.map((id) => tracks.find((t) => t.id === id)).filter((t): t is Tracking => !!t).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+  const basis = range.basis || 'comment'
   for (const t of ts) {
-    for (const r of await DB.resultsOf(t.id)) {
-      const p = posts.find((x) => x.id === r.postId)
-      ;(r.comments || []).forEach((c) => {
-        const k = r.postId + '|' + (c.id && !/^(x|local)-/.test(String(c.id)) ? c.id : normName((c.authorName || '') + ' ' + (c.text || '')).slice(0, 160))
-        const item = { ...c, platform: c.platform || r.meta.platform, _ref: { tid: t.id, postId: r.postId }, _post: p ? postLabel(p) : r.meta.title || '', _postAuthor: r.meta.postAuthor || '', _postUrl: p?.url || r.meta.url, _date: t.date }
+    for (const pid of t.postIds) {
+      const pc = await DB.pc(pid)
+      const p = posts.find((x) => x.id === pid)
+      pc.comments.forEach((c) => {
+        const k = pid + '|' + (c.id && !/^(x|local)-/.test(String(c.id)) ? c.id : normName((c.authorName || '') + ' ' + (c.text || '')).slice(0, 160))
+        if (out.has(k)) return
+        const day = dayOf(c, basis)
+        if ((range.from && (!day || day < range.from)) || (range.to && (!day || day > range.to))) return
+        const item = { ...c, platform: c.platform || p?.platform, _ref: { tid: t.id, postId: pid }, _post: p ? postLabel(p) : pc.title || '', _postAuthor: pc.postAuthor || p?.author || '', _postUrl: p?.url || pc.url, _date: day }
         out.set(k, item)
         plat[String(item.platform)] = (plat[String(item.platform)] || 0) + 1
       })
@@ -102,36 +125,36 @@ function compareRows(c: Snapshot, p: Snapshot | null, f?: { name: string; all: n
   })
 }
 
-/** Periodo: «mié, 25 nov 2026 · 14:03 – 14:09» si todo es del mismo día; si no, fecha y hora de cada extremo. */
-function periodOf(ts: Tracking[]) {
-  const a = trackWhen(ts[0]), b = trackWhen(ts[ts.length - 1])
-  if (ts.length === 1 || a === b) return a
-  const [da, ha] = a.split(' · '), [db, hb] = b.split(' · ')
-  return da === db && ha && hb ? `${da} · ${ha} – ${hb}` : `${a} – ${b}`
+const dayTxt = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+/** Periodo de los comentarios: «mié, 25 nov 2026» o «del … al …», y la fecha en que se basa. */
+function periodOf(days: string[], range: Range) {
+  const ds = days.filter(Boolean).sort()
+  const a = range.from || ds[0], b = range.to || ds[ds.length - 1]
+  const base = range.basis === 'extraction' ? 'por fecha de extracción' : 'por fecha del comentario'
+  if (!a || !b) return base
+  return (a === b ? dayTxt(a) : `del ${dayTxt(a)} al ${dayTxt(b)}`) + ` · ${base}`
 }
 
-/** Construye el informe. Con enfoque, la IA selecciona los comentarios del tema. */
-export async function buildReport(opts: { tids?: string[]; comments?: Comment[]; title?: string; focus: string; terms: string[]; author: string; client: string; onProgress?: (a: number, b: number) => void }): Promise<ReportModel> {
+/**
+ * Construye el informe. Con seguimientos, toma los comentarios del periodo (por fecha del comentario o de extracción)
+ * y los compara con el periodo anterior de la misma duración; la evolución se muestra día a día.
+ * Con enfoque, la IA selecciona los comentarios del tema.
+ */
+export async function buildReport(opts: { tids?: string[]; range?: Range; comments?: Comment[]; title?: string; focus: string; terms: string[]; author: string; client: string; onProgress?: (a: number, b: number) => void }): Promise<ReportModel> {
   let all: Comment[], tracks: Tracking[] = [], title = opts.title || 'Informe de comentarios'
-  /**
-   * Varios seguimientos: cada uno se carga por separado (sin mezclar sus comentarios). El más reciente es la base
-   * del informe (indicadores, publicaciones, personas, destacados) y se compara con cada uno de los demás.
-   */
-  let per: { t: Tracking; all: Comment[] }[] = []
+  const range = opts.range || {}
+  let prevAllList: Comment[] = [], prevR: Range | null = null
   if (opts.tids?.length) {
-    for (const id of opts.tids) {
-      const g = await gather([id])
-      if (!g.tracks[0]) continue
-      const l = finalize(g.comments.map((c, i) => ({ ...c, id: c.id || 'r' + i })), { platform: g.platform })
-      computeTeam(l, '')
-      per.push({ t: g.tracks[0], all: l })
+    const g = await gather(opts.tids, range)
+    tracks = g.tracks
+    if (!g.comments.length) throw new Error(range.from || range.to ? 'No hay comentarios en ese periodo en los seguimientos elegidos.' : 'Los seguimientos elegidos no tienen comentarios.')
+    all = finalize(g.comments.map((c, i) => ({ ...c, id: c.id || 'r' + i })), { platform: g.platform })
+    computeTeam(all, '')
+    prevR = prevRange(range)
+    if (prevR) {
+      const gp = await gather(opts.tids, prevR)
+      if (gp.comments.length) { prevAllList = finalize(gp.comments.map((c, i) => ({ ...c, id: c.id || 'q' + i })), { platform: gp.platform }); computeTeam(prevAllList, '') }
     }
-    per = per.sort((a, b) => a.t.date.localeCompare(b.t.date) || whenTs(a.t) - whenTs(b.t))
-    if (!per.some((x) => x.all.length)) throw new Error('Los seguimientos elegidos no tienen comentarios.')
-    per = per.filter((x, i) => x.all.length || i === per.length - 1)
-    tracks = per.map((x) => x.t)
-    all = per[per.length - 1].all
-    if (!all.length) throw new Error(`El seguimiento más reciente («${tracks[tracks.length - 1].name}») no tiene comentarios.`)
   } else {
     all = (opts.comments || []).map((c) => ({ ...c }))
     if (!all.length) throw new Error('No hay comentarios para el informe.')
@@ -140,9 +163,9 @@ export async function buildReport(opts: { tids?: string[]; comments?: Comment[];
   const fq = opts.focus.trim()
   let list = all, focus: ReportModel['focus'] = null, keys: Set<string> | null = null
   if (fq) {
-    // el enfoque se decide una sola vez sobre los comentarios de todos los seguimientos (sin repetir textos)
+    // el enfoque se decide una sola vez sobre los comentarios de ambos periodos (sin repetir textos)
     const pool = new Map<string, Comment>()
-    ;(per.length ? per.flatMap((x) => x.all) : all).forEach((c) => pool.set(fkey(c), c))
+    ;[...all, ...prevAllList].forEach((c) => pool.set(fkey(c), c))
     keys = await focusMatch([...pool.values()], fq, opts.onProgress)
     list = focusFilter(all, keys)
     if (!list.some((c) => !c.isTeam)) throw new Error(`ningún comentario habla de ${focusName(fq)}. Prueba con un enfoque más amplio.`)
@@ -150,17 +173,19 @@ export async function buildReport(opts: { tids?: string[]; comments?: Comment[];
   }
   const cur = snap(list)
   let prev: Snapshot | null = null, prevName = '', prevAll: number | null = null
+  if (prevAllList.length && prevR) {
+    prev = snap(keys ? focusFilter(prevAllList, keys) : prevAllList)
+    prevAll = prevAllList.length
+    prevName = `el periodo anterior (${periodOf([], prevR).split(' · ')[0]})`
+  }
+  // evolución día a día (de más reciente a más antiguo; cada día con su cambio respecto al anterior)
   const evolution: ReportModel['evolution'] = []
-  if (per.length > 1) {
-    const snaps = per.map((x) => ({ t: x.t, s: snap(keys ? focusFilter(x.all, keys) : x.all) }))
-    const base = snaps[snaps.length - 1]
-    const row = (x: (typeof snaps)[number]) => { const st = sentOf(x.s.list); return { name: x.t.name, date: trackWhen(x.t), total: x.s.list.length, pos: st.pos, neg: st.neg } }
-    const b = row(base)
-    // de más reciente a más antiguo; cada uno con lo que cambia la base respecto a él
-    snaps.slice().reverse().forEach((x) => { const r = row(x); evolution.push(x === base ? { ...r, base: true } : { ...r, dTotal: b.total - r.total, dPos: b.pos - r.pos, dNeg: b.neg - r.neg }) })
-    const before = per[per.length - 2]
-    prev = snaps[snaps.length - 2].s; prevAll = before.all.length
-    prevName = `«${before.t.name}» (${trackWhen(before.t)})`
+  const byDay = new Map<string, Comment[]>()
+  list.forEach((c) => { const d = String((c as Comment & { _date?: string })._date || ''); if (d) byDay.set(d, [...(byDay.get(d) || []), c]) })
+  const days = [...byDay.keys()].sort()
+  if (days.length > 1) {
+    const rows = days.slice(-31).map((d) => { const l = byDay.get(d)!, st = sentOf(l); return { name: dayTxt(d), date: '', total: l.length, pos: st.pos, neg: st.neg } })
+    rows.forEach((r, i) => { const p = rows[i - 1]; evolution.unshift(i === rows.length - 1 ? { ...r, base: true, ...(p ? { dTotal: r.total - p.total, dPos: r.pos - p.pos, dNeg: r.neg - p.neg } : {}) } : p ? { ...r, dTotal: r.total - p.total, dPos: r.pos - p.pos, dNeg: r.neg - p.neg } : r) })
   }
   const nonTeam = list.filter((c) => !c.isTeam)
   const byPost = new Map<string, Comment[]>()
@@ -175,7 +200,7 @@ export async function buildReport(opts: { tids?: string[]; comments?: Comment[];
   const byReact = (a: Comment, b: Comment) => (b.reactions || 0) - (a.reactions || 0) || (b.text || '').length - (a.text || '').length
   const m: ReportModel = {
     title, focus, author: opts.author, client: opts.client, terms: opts.terms, generatedAt: new Date().toISOString(),
-    period: tracks.length ? periodOf(tracks) : new Date().toLocaleDateString('es', { dateStyle: 'long' }),
+    period: opts.tids?.length ? periodOf(all.map((c) => String((c as Comment & { _date?: string })._date || '')), range) : new Date().toLocaleDateString('es', { dateStyle: 'long' }),
     tracks: tracks.map((t) => ({ id: t.id, name: t.name, date: t.date })),
     cur, prev, prevName, cmp: compareRows(cur, prev, focus ? { name: focus.name, all: all.length, allPrev: prevAll } : undefined), teamOn,
     pending: nonTeam.filter((c) => c.needsTeam).length, answered: nonTeam.filter((c) => c.teamAnswered).length,

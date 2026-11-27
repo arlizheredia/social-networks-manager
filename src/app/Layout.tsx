@@ -10,6 +10,7 @@ import { SessionsChip } from '@/features/comments/SessionsChip'
 import { SettingsDialog } from '@/features/settings/SettingsDialog'
 import { RunDialog } from '@/features/publisher/components/RunDialog'
 import { BackgroundTasks } from './BackgroundTasks'
+import { TrackWindow } from '@/features/comments/components/Tracking'
 
 const THEME_ICON = { system: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' } as const
 const THEME_LABEL = { system: 'Tema del sistema', light: 'Tema claro', dark: 'Tema oscuro' } as const
@@ -100,6 +101,7 @@ export function Layout() {
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <RunDialog />
+      <TrackWindow />
       <BackgroundTasks />
       <Toaster />
     </div>

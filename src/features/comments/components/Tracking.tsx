@@ -1,22 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { collapseRows } from '@/lib/motion'
 import { useNavigate } from 'react-router-dom'
-import { SkeletonList, Banner, Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, NumberField, Popover, Select, Textarea, confirmBox, toast } from '@/components/ui'
+import { SkeletonList, Banner, Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, NumberField, Popover, Select, Textarea, confirmBox, toast, FloatingWindow } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText } from '@/lib/util'
 import { useExtension } from '@/features/extension/bridge'
 import { ExtensionDialog } from '@/features/extension/ExtensionDialog'
-import { postLabel, todayISO, type Post, type Tracking as T } from '../db'
+import { postLabel, type Post, type Tracking as T } from '../db'
 import { setPrefs, usePrefs } from '../prefs'
 import { platName } from '../text'
 import {
   addPosts, countTxt, exportPosts, importPosts, parsePostsFile, deletePosts, deleteTracking, finishTracking, LOGIN_URL, missingAuth, refreshSessions, retryItem, retryNow, runTracking,
-  saveTracking, skipItem, stopTracking, trackProgress, trackWhen, updatePost, useTR,
+  saveTracking, skipItem, stopTracking, trackProgress, trackWhen, updatePost, useTR, unarchiveTracking, setTrackBg, closeTrackWin,
 } from '../tracking'
 import { openTrackingComments } from './open'
 
 const PDOT: Record<string, string> = { facebook: 'bg-fb', instagram: 'bg-ig', tiktok: 'bg-tt' }
-const ST_TXT = { draft: ['edit_note', 'Borrador'], running: ['progress_activity', 'En curso'], paused: ['pause_circle', 'En pausa'], done: ['task_alt', 'Completado'] } as const
+const ST_TXT = { draft: ['edit_note', 'Borrador'], running: ['progress_activity', 'En curso'], paused: ['pause_circle', 'En pausa'], done: ['task_alt', 'Al día'] } as const
 
 function TrackDialog({ open, onClose, postIds, edit }: { open: boolean; onClose: () => void; postIds: string[]; edit?: T | null }) {
   const { posts, sessions } = useTR()
@@ -24,37 +24,46 @@ function TrackDialog({ open, onClose, postIds, edit }: { open: boolean; onClose:
   const prefs = usePrefs()
   const [ids, setIds] = useState<string[]>([])
   const [name, setName] = useState('')
-  const [date, setDate] = useState(todayISO())
-  const [order, setOrder] = useState(prefs.fbOrder)
+  const [add, setAdd] = useState('')
   const [limit, setLimit] = useState(prefs.fbLimit || 1500)
   const [noLimit, setNoLimit] = useState(!prefs.fbLimit)
   useEffect(() => {
     if (!open) return
     setIds(edit ? edit.postIds : postIds)
-    setName(edit ? edit.name : 'Seguimiento del ' + new Date().toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' }))
-    setDate(edit ? edit.date : todayISO())
-    if (edit) { setOrder(edit.fbOrder); setNoLimit(!edit.fbLimit); setLimit(edit.fbLimit || 1500) }
+    setName(edit ? edit.name : 'Seguimiento de comentarios')
+    setAdd('')
+    if (edit) { setNoLimit(!edit.fbLimit); setLimit(edit.fbLimit || 1500) }
     refreshSessions()
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const sel = ids.map((id) => posts.find((p) => p.id === id)).filter((p): p is Post => !!p)
   const miss = ext ? missingAuth(sel) : []
   const save = async (start: boolean) => {
     const fbLimit = noLimit ? 0 : Math.max(50, Math.round(limit) || 1500)
-    setPrefs({ fbOrder: order, fbLimit })
-    const t = await saveTracking({ id: edit?.id, name, date, postIds: ids, fbOrder: order, fbLimit })
+    setPrefs({ fbLimit })
+    const t = await saveTracking({ id: edit?.id, name, postIds: ids, fbLimit })
     onClose()
     if (start) runTracking(t.id)
   }
   return (
-    <Dialog open={open} onClose={onClose} title={edit ? 'Editar seguimiento' : 'Nuevo seguimiento'}
+    <Dialog open={open} onClose={onClose} wide title={edit ? 'Editar seguimiento' : 'Nuevo seguimiento'}
       actions={<><Button variant="text" onClick={onClose}>Cancelar</Button><Button variant="outlined" disabled={!sel.length} onClick={() => save(false)}>Guardar</Button><Button icon="play_arrow" disabled={!sel.length || !ext || !!miss.length} onClick={() => save(true)}>Guardar e iniciar</Button></>}>
       <Field label="Nombre"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label="Fecha"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
       <div className="mb-1 text-[13px] font-medium text-text-2">Publicaciones ({sel.length})</div>
       <div className="mb-3 max-h-48 overflow-y-auto rounded-xl border border-outline-2">
         {sel.map((p) => <div key={p.id} className="flex items-center gap-2 border-b border-outline-2 px-3 py-1.5 last:border-0"><i className={cn('size-2.5 rounded-full', PDOT[p.platform])} /><span className="min-w-0 flex-1 truncate text-sm">{postLabel(p)}</span><IconButton size="sm" icon="close" label="Quitar" onClick={() => setIds(ids.filter((x) => x !== p.id))} /></div>)}
-        {!sel.length && <p className="p-3 text-sm text-text-2">No hay publicaciones. Ciérralo y selecciona algunas en la lista.</p>}
+        {!sel.length && <p className="p-3 text-sm text-text-2">No hay publicaciones. Añádelas abajo o selecciónalas en la lista.</p>}
       </div>
+      {posts.some((p) => !ids.includes(p.id)) && (
+        <div className="mb-3 flex gap-2">
+          <Select className="flex-1" value={add} onChange={(e) => setAdd(e.target.value)} aria-label="Añadir publicación">
+            <option value="">Añadir una publicación…</option>
+            {posts.filter((p) => !ids.includes(p.id)).map((p) => <option key={p.id} value={p.id}>{postLabel(p)}</option>)}
+          </Select>
+          <Button variant="tonal" icon="add" disabled={!add} onClick={() => { setIds([...ids, add]); setAdd('') }}>Añadir</Button>
+        </div>
+      )}
+      {edit && edit.postIds.some((id) => !ids.includes(id)) && <p className="mb-3 text-xs text-text-2"><Icon name="info" className="!text-[14px] align-[-2px]" /> Las publicaciones que quites conservan sus comentarios: no saldrán en los nuevos informes y, si las vuelves a añadir, la extracción continúa desde donde se quedó.</p>}
+      <p className="mb-3 rounded-2xl bg-surface-2 p-3 text-xs text-text-2"><b className="font-medium text-text">Cómo se extrae:</b> cada vez que inicies o continúes, cada publicación trae como mucho el máximo de comentarios (o los que le queden, si son menos) y el seguimiento se detiene solo. La primera vez se empieza por todos; después se continúa desde el último extraído y se suman los nuevos. Cada comentario guarda su fecha de extracción para los informes por día.</p>
       {!ext && <Banner tone="err" className="mb-3">La extensión no está instalada: instálala (Ajustes › Extensión) para poder iniciar el seguimiento.</Banner>}
       {!!miss.length && (
         <Banner tone="err" className="mb-3">
@@ -66,8 +75,7 @@ function TrackDialog({ open, onClose, postIds, edit }: { open: boolean; onClose:
       {sel.some((p) => p.platform === 'facebook') && (
         <div className="rounded-2xl bg-surface-2 p-3">
           <div className="mb-2 text-sm font-medium">Comentarios de Facebook</div>
-          <Field label="Comentarios a revisar"><Select value={order} onChange={(e) => setOrder(e.target.value as typeof order)}><option value="all">Todos los comentarios</option><option value="pert">Más pertinentes</option><option value="rec">Más recientes</option></Select></Field>
-          <div className="flex items-center gap-3"><span className="text-sm">Máximo por publicación</span><NumberField label="Máximo de comentarios por publicación" min={50} max={100000} step={50} disabled={noLimit} className="w-28" value={limit} onChange={setLimit} onOutOfRange={(_, f) => toast(`El máximo por publicación debe ser al menos 50: se usa ${f}`)} /><Chip selected={noLimit} onClick={() => setNoLimit(!noLimit)}>Sin límite</Chip></div>
+          <div className="flex flex-wrap items-center gap-3"><span className="text-sm">Máximo por publicación en cada extracción</span><NumberField label="Máximo de comentarios por publicación en cada extracción" min={50} max={100000} step={50} disabled={noLimit} className="w-28" value={limit} onChange={setLimit} onOutOfRange={(_, f) => toast(`El máximo por publicación debe ser al menos 50: se usa ${f}`)} /><Chip selected={noLimit} onClick={() => setNoLimit(!noLimit)}>Sin límite</Chip></div>
         </div>
       )}
     </Dialog>
@@ -141,37 +149,41 @@ function PostsCard({ onTrack }: { onTrack: (ids: string[]) => void }) {
   )
 }
 
-function TrackCard({ t, onEdit }: { t: T; onEdit: () => void }) {
-  const { posts, running, bg } = useTR()
-  const nav = useNavigate()
-  const [open, setOpen] = useState(t.id === running && !bg)
-  useEffect(() => { if (t.id === running) setOpen(!bg) }, [bg, running, t.id])
+/** Cabecera de un seguimiento: estado, nombre, última actualización, progreso. */
+function TrackHead({ t }: { t: T }) {
+  const { runs } = useTR()
+  const isRun = runs.includes(t.id)
   const pr = trackProgress(t)
   const [ic, label] = ST_TXT[t.status]
-  const isRun = running === t.id
   return (
-    <div data-row-id={t.id} className="rounded-3xl border border-outline-2 bg-surface">
-      <button className="flex w-full items-center gap-3 p-4 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
+    <>
         <Icon name={ic} className={cn('text-primary', isRun && 'animate-spin')} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-medium">{t.name}</div>
-          <div className="text-xs text-text-2">{trackWhen(t)} · {countTxt(pr.n, 'publicación', 'publicaciones')} · {countTxt(pr.comments, 'comentario', 'comentarios')}</div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary-container"><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pr.pct}%` }} /></div>
-        </div>
-        <span className="rounded-lg bg-surface-2 px-2 py-1 text-xs">{label} · {pr.pct} %</span>
-        <Icon name={open ? 'expand_less' : 'expand_more'} />
-      </button>
-      {open && (
-        <div className="border-t border-outline-2 p-4">
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">{t.name}</div>
+        <div className="text-xs text-text-2">{t.status === 'draft' ? 'Sin extraer' : `Actualizado ${trackWhen(t)}`} · {countTxt(pr.n, 'publicación', 'publicaciones')} · {countTxt(pr.comments, 'comentario', 'comentarios')}{(() => { const l = t.rounds?.[t.rounds.length - 1]; return l && t.status !== 'running' ? ` · última vuelta: ${l.newComments ? '+' + countTxt(l.newComments, 'nuevo', 'nuevos') : 'sin nuevos'}` : '' })()}{t.rounds && t.rounds.length > 1 ? ` · ${t.rounds.length} vueltas` : ''}</div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary-container"><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${pr.pct}%` }} /></div>
+      </div>
+      <span className="rounded-lg bg-surface-2 px-2 py-1 text-xs">{t.status === 'done' && t.postIds.some((id) => t.items[id]?.more) ? 'Quedan comentarios' : label}{t.status === 'running' ? ` · ${pr.pct} %` : ''}</span>
+    </>
+  )
+}
+
+/** Acciones y publicaciones de un seguimiento (en la lista y en la ventana flotante). */
+function TrackBody({ t, onEdit }: { t: T; onEdit?: () => void }) {
+  const { posts, runs } = useTR()
+  const nav = useNavigate()
+  const isRun = runs.includes(t.id)
+  const pr = trackProgress(t)
+  return (
+    <>
           {t.halt && <Banner tone="err" className="mb-3"><b>Se detuvo la extracción</b> en «{t.halt.post}»: {t.halt.error}</Banner>}
           <div className="mb-3 flex flex-wrap gap-2">
-            {isRun && <Button variant="tonal" icon="picture_in_picture_alt" onClick={() => { useTR.setState({ bg: true }); toast('Extracción en segundo plano: sigue en curso. Tócala abajo para volver.', 'picture_in_picture_alt') }}>Segundo plano</Button>}
-            {isRun ? <Button variant="danger" icon="stop" onClick={() => stopTracking()}>Detener</Button>
-              : t.status !== 'done' && <Button icon="play_arrow" disabled={!!running} onClick={() => runTracking(t.id)}>{t.status === 'draft' ? 'Iniciar' : 'Continuar'}</Button>}
+            {isRun ? <Button variant="danger" icon="stop" onClick={() => stopTracking(t.id)}>Detener</Button>
+              : <Button icon={t.status === 'done' ? 'refresh' : 'play_arrow'} onClick={() => runTracking(t.id)} title={t.status === 'done' ? 'Extrae solo los comentarios nuevos desde la última vez' : undefined}>{t.status === 'draft' ? 'Iniciar' : t.status === 'done' && !t.postIds.some((id) => t.items[id]?.more) ? 'Buscar comentarios nuevos' : 'Continuar'}</Button>}
             <Button variant="outlined" icon="forum" disabled={!pr.comments} onClick={async () => { await openTrackingComments([t.id]); nav('/comentarios/explorar') }}>Ver comentarios</Button>
             <Button variant="outlined" icon="summarize" disabled={!pr.comments} onClick={() => nav(`/informes?t=${t.id}`)}>Crear informe</Button>
-            {!isRun && <Button variant="text" icon="edit" onClick={onEdit}>Editar</Button>}
-            {!isRun && t.status !== 'done' && <Button variant="text" icon="inventory_2" onClick={() => finishTracking(t)}>Finalizar y archivar</Button>}
+            {!isRun && onEdit && <Button variant="text" icon="edit" onClick={onEdit}>Editar</Button>}
+            {!isRun && t.status !== 'draft' && <Button variant="text" icon="inventory_2" onClick={async () => { await collapseRows([t.id]); await finishTracking(t); toast(`«${t.name}» archivado: sigue en el historial y en los informes`) }}>Archivar</Button>}
             {!isRun && <Button variant="text" icon="delete" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar el seguimiento?', 'Se borrarán sus resultados. Los comentarios de una publicación solo se borran si ningún otro seguimiento los usa.', 'Eliminar', true)) { await collapseRows([t.id]); deleteTracking(t.id) } }}>Eliminar</Button>}
           </div>
           <div className="space-y-1">
@@ -179,13 +191,13 @@ function TrackCard({ t, onEdit }: { t: T; onEdit: () => void }) {
               const p = posts.find((x) => x.id === id), it = t.items[id]
               if (!it) return null
               const st = it.status === 'running' ? (it.phase === 'retry' && it.retry ? `Reintento ${it.retry.attempt} de ${it.retry.max} en ${it.retry.left} s${it.retry.offline ? ' (sin conexión)' : ''}` : it.phase === 'opening' ? 'Abriendo la publicación…' : `Extrayendo… ${it.count || 0}${it.total ? ' de ' + it.total : ''} comentarios`)
-                : it.status === 'done' ? `${countTxt(it.count || 0, 'comentario', 'comentarios')}${it.limitReached ? ' · límite alcanzado' : ''}${it.partial ? ' · parcial' : ''}`
+                : it.status === 'done' ? `${countTxt(it.count || 0, 'comentario', 'comentarios')}${it.newCount != null ? ` · ${it.newCount ? '+' + countTxt(it.newCount, 'nuevo', 'nuevos') : 'sin nuevos'}` : ''}${it.mode === 'full' ? ' · primera extracción' : it.mode === 'catch' ? ' · continuó con los que faltaban' : ''}${it.more && it.total ? ` · quedan ~${countTxt(Math.max(0, it.total - (it.count || 0)), 'comentario', 'comentarios')}: pulsa Continuar` : ''}${it.limitReached ? ' · límite alcanzado' : ''}${it.partial ? ' · parcial' : ''}`
                 : it.status === 'error' ? `Error: ${it.error}` : it.status === 'skipped' ? 'Omitida' : it.partial ? `Parcial: ${countTxt(it.count || 0, 'comentario', 'comentarios')}` : 'Pendiente'
               return (
                 <div key={id} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-text/4">
                   <Icon name={{ pending: 'schedule', running: 'progress_activity', done: 'check_circle', error: 'error', skipped: 'block' }[it.status]} className={cn('!text-[20px]', it.status === 'done' ? 'text-success' : it.status === 'error' ? 'text-error' : 'text-text-2', it.status === 'running' && 'animate-spin')} />
                   <div className="min-w-0 flex-1"><div className="truncate text-sm">{p ? postLabel(p) : id}</div><div className={cn('text-xs', it.status === 'error' ? 'text-error' : 'text-text-2')}>{st}{it.note && it.status === 'running' ? ` · ${it.note}` : ''}</div></div>
-                  {it.status === 'running' && it.phase === 'retry' && <Button size="sm" variant="text" onClick={retryNow}>Reintentar ahora</Button>}
+                  {it.status === 'running' && it.phase === 'retry' && <Button size="sm" variant="text" onClick={() => retryNow(t.id)}>Reintentar ahora</Button>}
                   {!isRun && (it.status === 'error' || it.status === 'done') && <IconButton size="sm" icon="refresh" label="Reintentar" onClick={() => retryItem(t, id)} />}
                   {!isRun && (it.status === 'error' || it.status === 'pending') && <IconButton size="sm" icon="skip_next" label="Omitir" onClick={() => skipItem(t, id)} />}
                   {it.status === 'error' && !!it.diag && <IconButton size="sm" icon="bug_report" label="Copiar diagnóstico" onClick={async () => toast((await copyText(JSON.stringify({ url: p?.url, error: it.error, diag: it.diag }, null, 2))) ? 'Diagnóstico copiado' : 'No se pudo copiar')} />}
@@ -194,28 +206,74 @@ function TrackCard({ t, onEdit }: { t: T; onEdit: () => void }) {
               )
             })}
           </div>
-        </div>
-      )}
+    </>
+  )
+}
+
+function TrackCard({ t, onEdit }: { t: T; onEdit: () => void }) {
+  const { runs, bgIds, win } = useTR()
+  const isRun = runs.includes(t.id), inWin = win === t.id && !bgIds.includes(t.id)
+  const [open, setOpen] = useState(false)
+  return (
+    <div data-row-id={t.id} className="rounded-3xl border border-outline-2 bg-surface">
+      <button className="flex w-full items-center gap-3 p-4 text-left" onClick={() => (isRun ? setTrackBg(t.id, false) : setOpen(!open))} aria-expanded={open}>
+        <TrackHead t={t} />
+        <span title={isRun ? 'Mostrar la ventana del seguimiento' : undefined}><Icon name={isRun ? (inWin ? 'select_window' : 'open_in_full') : open ? 'expand_less' : 'expand_more'} /></span>
+      </button>
+      {open && !isRun && <div className="border-t border-outline-2 p-4"><TrackBody t={t} onEdit={onEdit} /></div>}
     </div>
   )
 }
 
-/** Seguimiento diario: publicaciones guardadas y extracción automática con la extensión. */
+/** Ventana flotante (se arrastra, centrada por defecto) con el seguimiento en curso; se ve en cualquier pantalla. */
+export function TrackWindow() {
+  const { win, bgIds, tracks, runs } = useTR()
+  const t = win && !bgIds.includes(win) ? tracks.find((x) => x.id === win) : undefined
+  if (!t) return null
+  const isRun = runs.includes(t.id)
+  return (
+    <FloatingWindow id="seguimiento" label={`Seguimiento ${t.name}`} className="max-h-[min(80dvh,720px)] w-[min(760px,calc(100vw-16px))]"
+      head={<>
+        <TrackHead t={t} />
+        {isRun && <Button size="sm" variant="tonal" icon="picture_in_picture_alt" onClick={() => { setTrackBg(t.id, true); toast('Seguimiento en segundo plano: sigue en curso. Toca su tarjeta arriba a la derecha para volver.', 'picture_in_picture_alt') }}><span className="hidden sm:inline">Segundo plano</span></Button>}
+        <IconButton icon="close" label={isRun ? 'Cerrar (sigue en segundo plano)' : 'Cerrar'} onClick={closeTrackWin} />
+      </>}>
+      <div className="min-h-0 flex-1 overflow-y-auto p-5"><TrackBody t={t} /></div>
+    </FloatingWindow>
+  )
+}
+
+/** Seguimiento continuo: publicaciones guardadas y extracción automática (todos la primera vez; después, solo los nuevos). */
 export function TrackingPanel() {
   const { tracks, loaded } = useTR()
   const ext = useExtension((s) => s.extractor)
   const [dlg, setDlg] = useState<{ open: boolean; ids: string[]; edit: T | null }>({ open: false, ids: [], edit: null })
   const [extOpen, setExtOpen] = useState(false)
-  const active = tracks.filter((t) => t.status !== 'done')
+  // los seguimientos son continuos: siguen aquí (para buscar comentarios nuevos) hasta que se archivan
+  const active = tracks.filter((t) => !t.archived)
+  const archived = tracks.filter((t) => t.archived)
+  const [showArch, setShowArch] = useState(false)
   if (!loaded) return <SkeletonList rows={3} />
   return (
     <div className="space-y-4">
       {!ext && <Banner tone="warn" icon="extension_off" action={<Button size="sm" onClick={() => setExtOpen(true)}>Instalar</Button>}>Para extraer automáticamente los comentarios necesitas la <b>extensión de Chrome</b>.</Banner>}
       <PostsCard onTrack={(ids) => setDlg({ open: true, ids, edit: null })} />
       <Card>
-        <CardHead step={2} title="Seguimientos" sub="Cada seguimiento extrae los comentarios de sus publicaciones. Los completados pasan al Historial." />
+        <CardHead step={2} title="Seguimientos" sub="Cada seguimiento extrae todos los comentarios la primera vez y, después, solo los nuevos. Actualízalo cuando quieras; archívalo cuando ya no lo necesites." />
         {active.length ? <div className="space-y-3">{active.map((t) => <TrackCard key={t.id} t={t} onEdit={() => setDlg({ open: true, ids: [], edit: t })} />)}</div>
-          : <Empty icon={<Icon name="track_changes" />} title="No hay seguimientos en curso">Selecciona publicaciones en la lista y pulsa <b>Crear seguimiento</b>.</Empty>}
+          : <Empty icon={<Icon name="track_changes" />} title="No hay seguimientos activos">Selecciona publicaciones en la lista y pulsa <b>Crear seguimiento</b>.</Empty>}
+        {archived.length > 0 && (
+          <div className="mt-3">
+            <Button size="sm" variant="text" icon={showArch ? 'expand_less' : 'inventory_2'} onClick={() => setShowArch(!showArch)}>{showArch ? 'Ocultar archivados' : `Archivados (${archived.length})`}</Button>
+            {showArch && <div className="mt-2 divide-y divide-outline-2 rounded-2xl border border-outline-2">{archived.map((t) => (
+              <div key={t.id} className="flex items-center gap-3 px-4 py-2 text-sm">
+                <Icon name="inventory_2" className="!text-[18px] text-text-2" /><span className="min-w-0 flex-1 truncate">{t.name}</span>
+                <span className="text-xs text-text-2">{countTxt(trackProgress(t).comments, 'comentario', 'comentarios')}</span>
+                <Button size="sm" variant="tonal" icon="unarchive" onClick={async () => { await unarchiveTracking(t); toast(`«${t.name}» vuelve a los seguimientos activos`) }}>Reactivar</Button>
+              </div>
+            ))}</div>}
+          </div>
+        )}
       </Card>
       <TrackDialog open={dlg.open} postIds={dlg.ids} edit={dlg.edit} onClose={() => setDlg({ open: false, ids: [], edit: null })} />
       <ExtensionDialog open={extOpen} onClose={() => setExtOpen(false)} />

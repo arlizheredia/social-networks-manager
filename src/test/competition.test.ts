@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Result } from '@/features/comments/db'
+import type { PComments } from '@/features/comments/db'
 import { deliveryHoursIn, paymentsIn, placesIn, pricesIn } from '@/features/competition/data'
 
-const mk = (id: string, author: string, text: string, extra: object = {}) => ({ id, authorName: author, text, platform: 'facebook' as const, ...extra })
+const mk = (id: string, author: string, text: string, extra: object = {}) => ({ id, authorName: author, text, platform: 'facebook' as const, extractedAt: '2026-11-18T12:00:00.000Z', ...extra })
 // publicación de la marca (Kanasta24)
 const own = [
   mk('1', 'Julio Aguilera', '5 Estrellas. Kanasta24. Esta sonandooooo, los mejores de Cuba'),
@@ -18,10 +18,12 @@ const rival = [
   mk('f3', 'Mario León', 'Excelente servicio, muy rápidos y serios'),
   mk('f4', 'Luisa Peña', 'Me llegó el combo incompleto, faltaba el aceite'),
 ]
-const res = (tid: string, postId: string, postAuthor: string, comments: unknown[]): Result => ({ key: tid + '|' + postId, tid, postId, date: '2026-11-20', meta: { platform: 'facebook', postAuthor }, extractedAt: '', method: 'extension', partial: false, comments: comments as Result['comments'] })
+// caché de comentarios por publicación (común a los seguimientos que la incluyen)
+const pcOf = (postId: string, comments: unknown[]): PComments => ({ postId, comments: comments as PComments['comments'], updatedAt: '', postAuthor: postId === 'p2' ? 'Fagales Market' : 'Kanasta24' })
+const cache: Record<string, unknown[]> = { p1: own, p2: rival }
 vi.mock('@/features/comments/db', async (orig) => {
   const a = await orig<typeof import('@/features/comments/db')>()
-  return { ...a, DB: { ...a.DB, resultsOf: async (tid: string) => (tid === 'A' ? [res('A', 'p1', 'Kanasta24', own.slice(0, 3))] : [res('B', 'p1', 'Kanasta24', own.slice(3)), res('B', 'p2', 'Fagales Market', rival)]) } }
+  return { ...a, DB: { ...a.DB, pc: async (pid: string) => pcOf(pid, cache[pid] || []) } }
 })
 const { useTR } = await import('@/features/comments/tracking')
 const { getPrefs, setPrefs } = await import('@/features/comments/prefs')
@@ -63,8 +65,8 @@ describe('Datos de competencia en el texto', () => {
 describe('Informe de competencia', () => {
   const base = { status: 'done' as const, postIds: ['p1'], items: {}, fbOrder: 'all' as const, fbLimit: 0 }
   useTR.setState({
-    tracks: [{ ...base, id: 'A', name: 'Seguimiento lunes', date: '2026-11-17', createdAt: '2026-11-17T10:00:00Z' }, { ...base, id: 'B', name: 'Seguimiento jueves', date: '2026-11-20', createdAt: '2026-11-20T10:00:00Z' }, { ...base, id: 'C', name: 'Otro mes', date: '2026-10-01', createdAt: '2026-10-01T10:00:00Z' }],
-    posts: [{ id: 'p1', url: 'https://www.facebook.com/x/posts/1', platform: 'facebook', name: 'Post', title: '', author: '', addedAt: '', method: 'extension', notes: '' }],
+    tracks: [{ ...base, id: 'A', name: 'Seguimiento lunes', date: '2026-11-17', createdAt: '2026-11-17T10:00:00Z' }, { ...base, postIds: ['p1', 'p2'], id: 'B', name: 'Seguimiento jueves', date: '2026-11-20', createdAt: '2026-11-20T10:00:00Z' }, { ...base, id: 'C', name: 'Otro mes', date: '2026-10-01', createdAt: '2026-10-01T10:00:00Z' }],
+    posts: [{ id: 'p1', url: 'https://www.facebook.com/x/posts/1', platform: 'facebook', name: 'Post', title: '', author: '', addedAt: '', method: 'extension', notes: '' }, { id: 'p2', url: 'https://www.facebook.com/fagales/posts/2', platform: 'facebook', name: 'Fagales', title: '', author: '', addedAt: '', method: 'extension', notes: '' }],
   })
   setPrefs({ report: { ...getPrefs().report, client: 'Kanasta24', terms: 'Kanasta24', author: 'Lic. Yaimara Salinas Goite' } })
   const brandProfile = { coverage: { 'Santiago de Cuba': '8 municipios' }, payments: [], deliveryHours: 48, publicPrices: false, reviews: '' }
@@ -109,7 +111,6 @@ describe('Informe de competencia', () => {
 
   it('«Lo que dicen» solo incluye comentarios del tema (los de la captura no cuentan)', async () => {
     const { buildCompetitionModel: build } = await import('@/features/competition/analyze')
-    const { DB } = await import('@/features/comments/db')
     const screenshot = [
       mk('s1', 'Chavela Torres', 'Kanasta24, lo máximo, la mejor plataforma, la recomiendo 💯'),
       mk('s2', 'Elizabeth Ayala', 'Excelente Gracias muchas gracias por la calidad y rapidez Bendiciones miles 🙌'),
@@ -120,15 +121,15 @@ describe('Informe de competencia', () => {
       mk('s7', 'Luis Mora', '¿Aceptan Zelle o solo tarjeta?'),
       mk('s8', 'Ana Ruiz', 'Están muy caros los combos este mes'),
     ]
-    const orig = DB.resultsOf
-    ;(DB as { resultsOf: typeof orig }).resultsOf = async (tid: string) => [res(tid, 'p1', 'Kanasta24', screenshot)]
+    const orig = cache.p1
+    cache.p1 = screenshot
     try {
       const m = await build({ from: '2026-11-14', to: '2026-11-20', provinces: ['Holguín', 'Guantánamo'], tids: ['A'], competitors: [], brandProfile })
       const ev = Object.fromEntries(m.evidence.map((e) => [e.topic, e.items.map((x) => x.author)]))
       expect(ev['Formas de pago']).toEqual(['Luis Mora'])
       expect(ev['Cobertura y envíos']).toEqual(['Yenne Guibert'])
       expect(ev['Precios y combos']).toEqual(['Ana Ruiz'])
-    } finally { (DB as { resultsOf: typeof orig }).resultsOf = orig }
+    } finally { cache.p1 = orig }
   })
 
   it('respeta lo corregido a mano y no recrea lo descartado', async () => {

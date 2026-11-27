@@ -8,7 +8,7 @@ import { parseFbUrl } from '@/features/publisher/fb'
 import { openTrackingComments } from '@/features/comments/components/open'
 import { activeGroups, awaitingItems, entryTitle, usage } from '@/features/publisher/logic'
 import { ymd } from '@/features/publisher/report'
-import { useTR, trackProgress, inHistory, runTracking } from '@/features/comments/tracking'
+import { useTR, trackProgress, inHistory, runTracking, newSince, trackTs } from '@/features/comments/tracking'
 import { getPrefs } from '@/features/comments/prefs'
 import { loadCompHistory, setRun, useCompetition, useCompHistory } from '@/features/competition/store'
 import { useAI } from '@/features/ai/engine'
@@ -129,7 +129,7 @@ function Mini({ label, value }: { label: string; value: ReactNode }) {
 export default function HomePage() {
   const nav = useNavigate()
   const pub = usePublisher()
-  const { tracks, posts, running, loaded: trLoaded } = useTR()
+  const { tracks, posts, runs, loaded: trLoaded } = useTR()
   const comp = useCompetition()
   const compHist = useCompHistory()
   const ai = useAI()
@@ -141,7 +141,7 @@ export default function HomePage() {
   const day = usage(pub).day.length
   const pendingRuns = pub.history.filter((h) => h.items.some((i) => i.status === 'pending')).length
   const aw = awaitingItems(pub.history).length
-  const runningT = tracks.find((t) => t.id === running)
+  const runningT = tracks.find((t) => runs.includes(t.id))
   const lastDone = tracks.find(inHistory)
 
   // Difusión: grupos en que se compartió cada día (últimos 14 días)
@@ -182,7 +182,8 @@ export default function HomePage() {
 
   // Comentarios recogidos en los últimos 30 días
   const since30 = Date.now() - 30 * 864e5
-  const comments30 = tracks.filter((t) => Date.parse(t.date + 'T12:00') >= since30).reduce((s, t) => s + trackProgress(t).comments, 0)
+  // comentarios nuevos extraídos en los últimos 30 días (vueltas de cada seguimiento; los antiguos, por su última actualización)
+  const comments30 = tracks.reduce((s, t) => s + (t.rounds?.length ? newSince(t, 30) : trackTs(t) >= since30 ? trackProgress(t).comments : 0), 0)
 
   // Competencia
   const rivals = comp.competitors.filter((c) => c.status !== 'pendiente')
@@ -220,12 +221,12 @@ export default function HomePage() {
         ...(t.status === 'running' ? [{ text: `en curso · ${pr.pct} %`, cls: INFO }] : []),
         ...(t.status === 'paused' ? [{ text: t.interrupted ? 'interrumpido' : 'en pausa', cls: WARN }] : []),
         ...(pr.errors ? [{ text: `${pr.errors} con error`, cls: ERR }] : []),
-        ...(t.status === 'done' ? [{ text: 'completado', cls: OK }] : []),
+        ...(t.status === 'done' ? [{ text: (() => { const l = t.rounds?.[t.rounds.length - 1]; return l ? (l.newComments ? `+${fmtNum(l.newComments)} nuevos` : 'sin nuevos') : 'al día' })(), cls: OK }] : []),
       ]
-      return { at: Date.parse(t.finishedAt || t.startedAt || t.createdAt) || 0, kind: 'seg', icon: 'forum', tone: t.status === 'done' ? INFO : WARN, title: t.name,
+      return { at: trackTs(t), kind: 'seg', icon: 'forum', tone: t.status === 'done' ? INFO : WARN, title: t.name,
         sub: `Seguimiento de comentarios · ${fmtNum(pr.comments)} comentarios de ${pr.n} publicaciones`, to: t.status === 'done' ? `/historial?tab=seg&t=${encodeURIComponent(t.id)}` : '/comentarios', badges,
         actions: [
-          ...(t.status === 'paused' && !running ? [{ label: 'Continuar', icon: 'play_arrow', run: () => { nav('/comentarios'); runTracking(t.id) } }] : []),
+          ...((t.status === 'paused' || t.status === 'done') && !runs.includes(t.id) ? [{ label: t.status === 'done' ? 'Buscar nuevos' : 'Continuar', icon: t.status === 'done' ? 'refresh' : 'play_arrow', run: () => { nav('/comentarios'); runTracking(t.id) } }] : []),
           ...(pr.comments ? [{ label: 'Ver comentarios', icon: 'forum', run: async () => { await openTrackingComments([t.id]); nav('/comentarios/explorar') } }] : []),
           ...(pr.comments ? [{ label: 'Crear informe', icon: 'summarize', run: () => nav(`/informes?t=${t.id}`) }] : []),
         ] }
@@ -241,7 +242,7 @@ export default function HomePage() {
       <Tile icon="send" tone="text-success" label="Publicados hoy" value={<CountUp value={day} />} sub={`/ ${fmtNum(pub.settings.dayCap)}`} />
       <Tile icon="pending" tone="text-warn" label="En aprobación" value={<CountUp value={aw} />} />
       <Tile icon="track_changes" label="Publicaciones seguidas" value={<CountUp value={posts.length} />} />
-      <Tile icon="forum" label="Comentarios (30 días)" value={<CountUp value={comments30} />} />
+      <Tile icon="forum" label="Comentarios nuevos (30 días)" value={<CountUp value={comments30} />} />
       <Tile icon="storefront" label="Competidores" value={<CountUp value={rivals.length} />} />
     </div>
   )
@@ -270,7 +271,7 @@ export default function HomePage() {
       )}
       {runningT && (
         <Banner tone="info" icon="progress_activity" action={<Link to="/comentarios"><Button size="sm">Ver</Button></Link>}>
-          <b>Extrayendo comentarios:</b> «{runningT.name}» · {trackProgress(runningT).pct} %
+          <b>Extrayendo comentarios:</b> {runs.length > 1 ? `${runs.length} seguimientos en paralelo` : <>«{runningT.name}» · {trackProgress(runningT).pct} %</>}
         </Banner>
       )}
 

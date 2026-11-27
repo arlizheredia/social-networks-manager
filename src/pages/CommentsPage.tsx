@@ -74,13 +74,13 @@ export default function CommentsPage() {
   const { pathname } = useLocation()
   const nav = useNavigate()
   const tab: Tab = pathname.includes('/explorar') ? 'explorar' : 'seguimiento'
-  const running = useTR((s) => s.running)
+  const running = useTR((s) => s.runs.length > 0)
   const n = useExplore((s) => s.comments.length)
   return (
     <div>
       <PageHead title="Comentarios" sub="Obtén, analiza y responde los comentarios de Facebook, Instagram y TikTok." />
       <Tabs value={tab} onChange={(t) => nav(t === 'explorar' ? '/comentarios/explorar' : '/comentarios')} tabs={[
-        { id: 'seguimiento', label: 'Seguimiento diario', icon: running ? 'progress_activity' : 'track_changes' },
+        { id: 'seguimiento', label: 'Seguimiento', icon: running ? 'progress_activity' : 'track_changes' },
         { id: 'explorar', label: 'Analizar y responder', icon: 'insights', badge: n || undefined },
       ]} />
       {tab === 'seguimiento' ? <TrackingPanel /> : <Explore />}

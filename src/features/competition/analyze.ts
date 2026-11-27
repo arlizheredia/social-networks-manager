@@ -7,7 +7,7 @@ import { brandIn, brandKeys, finalize } from '@/features/comments/normalize'
 import { computeTeam, detectRivals, semanticScores } from '@/features/comments/analysis'
 import { buildReport, gather } from '@/features/comments/report'
 import { getPrefs } from '@/features/comments/prefs'
-import { inHistory, useTR } from '@/features/comments/tracking'
+import { inHistory, useTR, activeIn, trackTs } from '@/features/comments/tracking'
 import { normL } from '@/features/comments/text'
 import type { Comment } from '@/features/comments/types'
 import { generate, useAI } from '@/features/ai/engine'
@@ -93,8 +93,8 @@ export function periodTxt(from: string, to: string) {
 const hoursTxt = (h: number) => (!h ? '' : h <= 48 ? `${h} h` : `${Math.round(h / 24)} días`)
 const keyOf = (s: string) => normL(s).replace(/^(la|el|los|las)\s+/, '').replace(/[^a-z0-9ñ ]/g, '').trim()
 
-/** Seguimientos completados dentro del periodo. */
-export const tracksInRange = (from: string, to: string) => useTR.getState().tracks.filter((t) => inHistory(t) && t.date >= from && t.date <= to)
+/** Seguimientos con actividad en el periodo (los comentarios se filtran después por su fecha). */
+export const tracksInRange = (from: string, to: string) => useTR.getState().tracks.filter((t) => inHistory(t) && activeIn(t, from, to))
 
 export async function buildCompetitionModel(opts: {
   from: string; to: string; provinces: Province[]; tids: string[]; competitors: Competitor[]; brandProfile: BrandProfile
@@ -114,9 +114,10 @@ export async function buildCompetitionModel(opts: {
   /* ---------- 1. Comentarios del periodo ---------- */
   step('Reuniendo los comentarios de los seguimientos…', 2)
   let all: Comment[] = []
-  const tracks = useTR.getState().tracks.filter((t) => opts.tids.includes(t.id)).sort((a, b) => a.date.localeCompare(b.date))
+  const tracks = useTR.getState().tracks.filter((t) => opts.tids.includes(t.id)).sort((a, b) => trackTs(a) - trackTs(b))
   if (tracks.length) {
-    const g = await gather(tracks.map((t) => t.id))
+    // solo los comentarios del periodo del informe (por su fecha), de las publicaciones actuales de cada seguimiento
+    const g = await gather(tracks.map((t) => t.id), { from: opts.from, to: opts.to, basis: 'comment' })
     all = finalize(g.comments.map((c, i) => ({ ...c, id: c.id || 'k' + i })), { platform: g.platform })
     computeTeam(all, '')
   }
@@ -372,14 +373,14 @@ export async function buildCompetitionModel(opts: {
   const model: CompModel = {
     brand, author: prefs.author, from: opts.from, to: opts.to, period: periodTxt(opts.from, opts.to),
     provinces: provs, generatedAt: new Date().toISOString(), network: 'Facebook',
-    sources: { tracks: tracks.map((t) => ({ name: t.name, date: t.date })), comments: all.length },
+    sources: { tracks: tracks.map((t) => ({ name: t.name, date: new Date(trackTs(t)).toISOString().slice(0, 10) })), comments: all.length },
     summary: S, mainRec, threats,
     payEco: { zelle, byCompetitor: threats.filter((t) => t.payments.length).map((t) => ({ name: t.name, payments: t.payments })), brandHasZelle: bp.payments.includes('Zelle') },
     prices, provinceRows,
     social: { total: s.total, pos: s.pos, neg: s.neg, neu: s.neu, posPct: pct(s.pos), negPct: pct(s.neg), authors, themes, strong: strongM, improve, reading },
     coverageQs, evidence, proposals: P, recommendations: R, pending, conclusions: C,
     annexes: [...(bp.urls?.length ? [`Ficha de ${brand} detectada de su sitio online (${bp.urls.join(', ')})${bp.analyzedAt ? `, leído el ${new Date(bp.analyzedAt).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}` : ''}.`] : []),
-      ...tracks.map((t) => `Seguimiento «${t.name}» (${longDay(t.date)}).`),
+      ...tracks.map((t) => `Seguimiento «${t.name}» (actualizado el ${longDay(new Date(trackTs(t)).toISOString().slice(0, 10))}).`),
       ...(auto.created.length ? [`Fichas creadas por la IA en este informe: ${list(auto.created)}.`] : []),
       ...(auto.updated.length ? [`Fichas actualizadas con los comentarios del periodo: ${list(auto.updated)}.`] : []),
       ...(comps.length ? [`Fichas de ${comps.length} competidor${comps.length === 1 ? '' : 'es'} usadas en el análisis.`] : [])],

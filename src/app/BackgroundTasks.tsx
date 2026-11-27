@@ -6,7 +6,7 @@ import { showRun, startRun, useRun, type RunState } from '@/features/publisher/r
 import { usePublisher } from '@/features/publisher/store'
 import { entryTitle } from '@/features/publisher/logic'
 import { autoPct } from '@/features/publisher/components/RunDialog'
-import { putTracking, runTracking, trackProgress, useTR } from '@/features/comments/tracking'
+import { putTracking, runTracking, setTrackBg, trackProgress, useTR } from '@/features/comments/tracking'
 
 /** Anillo de progreso pequeño con el porcentaje dentro. */
 function Ring({ pct, spin }: { pct: number | null; spin?: boolean }) {
@@ -57,7 +57,7 @@ function Interrupted({ icon, title, sub, pct, onContinue, onDismiss }: { icon: s
 export function BackgroundTasks() {
   const { runs, front } = useRun()
   const history = usePublisher((s) => s.history)
-  const { running, bg, tracks } = useTR()
+  const { runs: trRuns, bgIds, tracks } = useTR()
   const nav = useNavigate()
   const { pathname } = useLocation()
 
@@ -65,19 +65,18 @@ export function BackgroundTasks() {
   const entry = (id: string) => history.find((h) => h.id === id)
   const isDone = (r: RunState) => { const e = entry(r.entryId); return !!e && r.idx >= e.items.length }
   const bgRuns = runs.filter((r) => entry(r.entryId) && (r.bg || r.entryId !== front))
-  const t = running ? tracks.find((x) => x.id === running) : undefined
-  const onTracking = pathname === '/comentarios' || pathname === '/comentarios/'
-  const trShow = !!t && (bg || !onTracking)
+  // seguimientos en curso en segundo plano (el de la ventana flotante ya está a la vista)
+  const trBg = trRuns.map((id) => tracks.find((x) => x.id === id)).filter((x): x is NonNullable<typeof x> => !!x && bgIds.includes(x.id))
 
   // Procesos interrumpidos por recargar o cerrar la página (su avance está guardado)
   const runIds = usePublisher((s) => s.runIds)
   const [hidden, setHidden] = useState<string[]>([])
   const pubInts = pathname === '/publicar' ? [] // en Publicar ya se ofrece reanudar en un aviso
     : runIds.filter((id) => !runs.some((r) => r.entryId === id) && !hidden.includes(id)).map(entry).filter((h): h is NonNullable<typeof h> => !!h && h.items.some((i) => i.status === 'pending'))
-  const trInt = !running ? tracks.filter((x) => x.interrupted && x.status === 'paused') : []
+  const trInt = tracks.filter((x) => x.interrupted && x.status === 'paused' && !trRuns.includes(x.id))
 
   // Recargar o cerrar la página durante una operación en curso: el navegador pide confirmación
-  const busy = runs.some((r) => !isDone(r)) || !!running
+  const busy = runs.some((r) => !isDone(r)) || trRuns.length > 0
   useEffect(() => {
     if (!busy) return
     const h = (ev: BeforeUnloadEvent) => { ev.preventDefault(); ev.returnValue = '' }
@@ -97,7 +96,7 @@ export function BackgroundTasks() {
     })
   })
 
-  if (!bgRuns.length && !trShow && !pubInts.length && !trInt.length) return null
+  if (!bgRuns.length && !trBg.length && !pubInts.length && !trInt.length) return null
   const pubs = bgRuns.map((R) => {
     const e = entry(R.entryId)!
     const n = e.items.length, d = e.items.filter((i) => i.status !== 'pending').length
@@ -108,13 +107,13 @@ export function BackgroundTasks() {
       : `${mode} · ${d} de ${n} · esperando tu acción en «${it?.name || ''}»`
     return <Task key={R.entryId} icon="campaign" title={entryTitle(e)} sub={sub} pct={done ? 100 : R.auto ? autoPct(R, e) : Math.round((d / n) * 100)} done={done} onOpen={() => showRun(R.entryId)} />
   })
-  let tr = null
-  if (trShow && t) {
+  const tr = trBg.map((t) => {
     const pr = trackProgress(t)
     const cur = t.postIds.map((id) => t.items[id]).find((i) => i?.status === 'running')
-    tr = <Task icon="forum" title={`Extrayendo comentarios · ${t.name}`} sub={`${pr.done} de ${pr.n} publicaciones · ${pr.comments.toLocaleString('es')} comentarios${cur?.phase === 'retry' ? ' · reintentando' : ''}`} pct={pr.pct}
-      onOpen={() => { useTR.setState({ bg: false }); nav('/comentarios') }} />
-  }
+    const st = cur?.phase === 'retry' ? ' · reintentando' : cur?.note?.startsWith('Esperando turno') ? ' · esperando turno' : ''
+    return <Task key={t.id} icon="forum" title={`Extrayendo comentarios · ${t.name}`} sub={`${pr.done} de ${pr.n} publicaciones · ${pr.comments.toLocaleString('es')} comentarios${st}`} pct={pr.pct}
+      onOpen={() => setTrackBg(t.id, false)} />
+  })
   return (
     <div className="fixed top-[68px] right-3 left-3 z-30 flex max-h-[calc(100dvh-90px)] flex-col items-end gap-2 overflow-y-auto sm:left-auto md:right-4" aria-label="Procesos en segundo plano">
       {pubs}{tr}

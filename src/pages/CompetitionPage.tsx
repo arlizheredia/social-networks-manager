@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Banner, Button, Card, CardHead, Icon, Input, PageHead, Switch, Tabs, toast } from '@/components/ui'
 import { usePrefs } from '@/features/comments/prefs'
-import { countTxt, useTR } from '@/features/comments/tracking'
+import { countTxt, useTR, trackTs } from '@/features/comments/tracking'
 import { useAI } from '@/features/ai/engine'
 import { NeedsAI } from '@/features/ai/AIDialog'
 import { buildCompetitionModel, headlineOf, tracksInRange, type CompModel } from '@/features/competition/analyze'
@@ -120,7 +120,7 @@ function NewReport({ brand }: { brand: string }) {
         </div>
         {tracks.length ? (
           <div className="space-y-1">{tracks.map((t) => (
-            <label key={t.id} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={!skip.has(t.id)} onChange={(e) => { const s = new Set(skip); e.target.checked ? s.delete(t.id) : s.add(t.id); setSkip(s) }} /><span className="truncate">{t.name}</span><span className="text-xs text-text-2">· {new Date(t.date + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {countTxt(t.postIds.length, 'publicación', 'publicaciones')}</span></label>
+            <label key={t.id} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={!skip.has(t.id)} onChange={(e) => { const s = new Set(skip); e.target.checked ? s.delete(t.id) : s.add(t.id); setSkip(s) }} /><span className="truncate">{t.name}</span><span className="text-xs text-text-2">· actualizado {new Date(trackTs(t)).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {countTxt(t.postIds.length, 'publicación', 'publicaciones')}</span></label>
           ))}</div>
         ) : <p className="text-text-2">No hay seguimientos completados en ese periodo: la IA no tendrá comentarios en los que buscar a la competencia y el informe usará solo las fichas que ya existen.</p>}
       </Card>

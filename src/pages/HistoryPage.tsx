@@ -12,7 +12,7 @@ import { awaitingItems, entryTitle, failedItems, unpublishItem } from '@/feature
 import { retryFailed, startRun } from '@/features/publisher/run'
 import { applyCheck, parseCheck } from '@/features/publisher/verify'
 import type { HistoryEntry, HistoryItem } from '@/features/publisher/types'
-import { countTxt, deleteTracking, inHistory, trackProgress, trackWhen, useTR } from '@/features/comments/tracking'
+import { countTxt, deleteTracking, inHistory, trackProgress, trackWhen, useTR, activeIn } from '@/features/comments/tracking'
 import { openTrackingComments } from '@/features/comments/components/open'
 
 function VerifyDialog({ target, onClose }: { target: { hid: string; idx: number } | null; onClose: () => void }) {
@@ -140,7 +140,7 @@ function PublishHistory() {
 }
 
 function TrackingHistory() {
-  const { tracks, running, loaded } = useTR()
+  const { tracks, runs, loaded } = useTR()
   const nav = useNavigate()
   // seguimiento pedido por enlace (p. ej. desde el aviso «Ver en el historial»): se muestra y se resalta
   const [params] = useSearchParams()
@@ -153,10 +153,10 @@ function TrackingHistory() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [sel, setSel] = useState<Set<string>>(new Set())
-  const list = tracks.filter((t) => inHistory(t) && running !== t.id && (!from || t.date >= from) && (!to || t.date <= to))
+  const list = tracks.filter((t) => inHistory(t) && !runs.includes(t.id) && activeIn(t, from, to))
   const ids = [...sel].filter((id) => list.some((t) => t.id === id))
   if (!loaded) return <SkeletonList rows={3} />
-  if (!tracks.some(inHistory)) return <Card><Empty icon={<Icon name="track_changes" />} title="Todavía no hay seguimientos completados">Créalos en Comentarios › Seguimiento diario.<div className="mt-3"><Button icon="forum" onClick={() => nav('/comentarios')}>Ir a Comentarios</Button></div></Empty></Card>
+  if (!tracks.some(inHistory)) return <Card><Empty icon={<Icon name="track_changes" />} title="Todavía no hay seguimientos completados">Créalos en Comentarios › Seguimiento.<div className="mt-3"><Button icon="forum" onClick={() => nav('/comentarios')}>Ir a Comentarios</Button></div></Empty></Card>
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-2">
