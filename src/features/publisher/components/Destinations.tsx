@@ -27,12 +27,28 @@ export function Destinations() {
 
   return (
     <div>
-      {!!tags.length && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-text-2">Seleccionar por etiqueta:</span>
-          {tags.map((t) => <Chip key={t} icon="tag" onClick={() => { saveSel(new Set(avail.filter((g) => g.tags.includes(t)).map((g) => g.id))); toast(`Seleccionados los grupos con etiqueta «${t}»`) }}>{t}</Chip>)}
-        </div>
-      )}
+      {!!tags.length && (() => {
+        // varias etiquetas a la vez: cada una suma o quita sus grupos de la selección
+        const untagged = avail.filter((g) => !g.tags.length)
+        const opts = [...tags.map((t) => ({ key: t, label: t, ids: avail.filter((g) => g.tags.includes(t)).map((g) => g.id) })),
+          ...(untagged.length ? [{ key: '', label: 'Sin etiqueta', ids: untagged.map((g) => g.id) }] : [])].filter((o) => o.ids.length)
+        const on = (ids: string[]) => ids.every((id) => sel.has(id))
+        const picked = opts.filter((o) => on(o.ids))
+        return (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-text-2">Etiquetas:</span>
+            {opts.map((o) => (
+              <Chip key={o.key || '_none'} icon={o.key ? 'tag' : 'label_off'} selected={on(o.ids)} onClick={() => {
+                const s2 = computeSel(usePublisher.getState()) // selección actual (por si se pulsan varias seguidas)
+                if (o.ids.every((id) => s2.has(id))) o.ids.forEach((id) => s2.delete(id)); else o.ids.forEach((id) => s2.add(id))
+                saveSel(s2)
+              }}>{o.label} <span className="ml-0.5 tabular-nums opacity-70">{o.ids.length}</span></Chip>
+            ))}
+            {sel.size > 0 && <button className="text-xs font-medium text-primary" onClick={() => saveSel(new Set())}>Ninguna</button>}
+            {picked.length > 1 && <span className="text-xs text-text-2">{picked.length} etiquetas · {sel.size} grupos</span>}
+          </div>
+        )
+      })()}
       <div className="overflow-hidden rounded-2xl border border-outline-2">
         <label className="flex cursor-pointer items-center gap-3 border-b border-outline-2 bg-surface-2 px-4 py-2 text-xs text-text-2">
           <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={allOn} disabled={!avail.length} ref={(el) => { if (el) el.indeterminate = sel.size > 0 && !allOn }} onChange={(e) => saveSel(e.target.checked ? new Set(avail.map((g) => g.id)) : new Set())} />
