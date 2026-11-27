@@ -31,11 +31,15 @@ export interface RunState {
   log: string[]
   msgs: FbMsg[]
   cleared: boolean
+  /** En segundo plano: la pantalla de publicación se oculta y el proceso sigue */
+  bg?: boolean
 }
 
 export const useRun = create<{ run: RunState | null }>(() => ({ run: null }))
 const R = () => useRun.getState().run
 const patch = (p: Partial<RunState>) => useRun.setState((s) => (s.run ? { run: { ...s.run, ...p } } : s))
+/** Pasa la publicación en curso a segundo plano o la trae de vuelta a primer plano. */
+export const setRunBg = (bg: boolean) => patch({ bg })
 export const runEntry = (): HistoryEntry | undefined => { const r = R(); return r ? getPub().history.find((h) => h.id === r.entryId) : undefined }
 
 /* ---------- Cuenta de Facebook (vía extensión) ---------- */
@@ -108,6 +112,11 @@ async function resolveInflight(entryId: string) {
 /* ---------- Inicio ---------- */
 /** Crea la entrada de historial desde el formulario (o reanuda una existente) y abre el asistente. */
 export async function startRun(fromHistId?: string) {
+  const cur = R()
+  if (cur) { // ya hay una publicación (quizá en segundo plano): se trae a primer plano en lugar de empezar otra
+    const e = runEntry()
+    if (e && cur.idx < e.items.length) { patch({ bg: false }); toast('Ya hay una publicación en curso: termínala o detenla antes de empezar otra'); return }
+  }
   let entryId: string
   if (fromHistId) {
     await resolveInflight(fromHistId)

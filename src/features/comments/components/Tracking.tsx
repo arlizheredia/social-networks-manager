@@ -141,9 +141,10 @@ function PostsCard({ onTrack }: { onTrack: (ids: string[]) => void }) {
 }
 
 function TrackCard({ t, onEdit }: { t: T; onEdit: () => void }) {
-  const { posts, running } = useTR()
+  const { posts, running, bg } = useTR()
   const nav = useNavigate()
-  const [open, setOpen] = useState(t.id === running)
+  const [open, setOpen] = useState(t.id === running && !bg)
+  useEffect(() => { if (t.id === running) setOpen(!bg) }, [bg, running, t.id])
   const pr = trackProgress(t)
   const [ic, label] = ST_TXT[t.status]
   const isRun = running === t.id
@@ -163,6 +164,7 @@ function TrackCard({ t, onEdit }: { t: T; onEdit: () => void }) {
         <div className="border-t border-outline-2 p-4">
           {t.halt && <Banner tone="err" className="mb-3"><b>Se detuvo la extracción</b> en «{t.halt.post}»: {t.halt.error}</Banner>}
           <div className="mb-3 flex flex-wrap gap-2">
+            {isRun && <Button variant="tonal" icon="picture_in_picture_alt" onClick={() => { useTR.setState({ bg: true }); toast('Extracción en segundo plano: sigue en curso. Tócala abajo para volver.', 'picture_in_picture_alt') }}>Segundo plano</Button>}
             {isRun ? <Button variant="danger" icon="stop" onClick={() => stopTracking()}>Detener</Button>
               : t.status !== 'done' && <Button icon="play_arrow" disabled={!!running} onClick={() => runTracking(t.id)}>{t.status === 'draft' ? 'Iniciar' : 'Continuar'}</Button>}
             <Button variant="outlined" icon="forum" disabled={!pr.comments} onClick={async () => { await openTrackingComments([t.id]); nav('/comentarios/explorar') }}>Ver comentarios</Button>

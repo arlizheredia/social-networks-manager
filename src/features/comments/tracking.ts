@@ -15,7 +15,7 @@ import { canonUrl, detectPlatform, normL, platName } from './text'
 import type { Parsed, Platform, RawComment } from './types'
 
 export interface Sessions { facebook: boolean; instagram: boolean; tiktok: boolean; known: boolean }
-interface TRState { posts: Post[]; tracks: Tracking[]; running: string | null; loaded: boolean; sessions: Sessions; tick: number }
+interface TRState { posts: Post[]; tracks: Tracking[]; running: string | null; loaded: boolean; sessions: Sessions; tick: number; /** extracción en segundo plano */ bg?: boolean }
 export const useTR = create<TRState>(() => ({ posts: [], tracks: [], running: null, loaded: false, sessions: { facebook: false, instagram: false, tiktok: false, known: false }, tick: 0 }))
 const bump = () => useTR.setState((s) => ({ tick: s.tick + 1, tracks: [...s.tracks] }))
 
@@ -339,7 +339,7 @@ export async function runTracking(tid: string) {
   const miss = missingAuth(pend)
   if (miss.length) { toast(`Inicia sesión en ${miss.map(platName).join(', ')} en este navegador para iniciar el seguimiento.`); return }
   Object.assign(RUN, { stopReq: false, halt: null, extCount: 0 })
-  useTR.setState({ running: tid })
+  useTR.setState({ running: tid, bg: false })
   delete t.halt
   t.status = 'running'; t.startedAt ||= new Date().toISOString()
   await putTracking(t)

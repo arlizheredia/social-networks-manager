@@ -9,6 +9,7 @@ import { ExtensionChip } from '@/features/extension/ExtensionChip'
 import { SessionsChip } from '@/features/comments/SessionsChip'
 import { SettingsDialog } from '@/features/settings/SettingsDialog'
 import { RunDialog } from '@/features/publisher/components/RunDialog'
+import { BackgroundTasks } from './BackgroundTasks'
 
 const THEME_ICON = { system: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' } as const
 const THEME_LABEL = { system: 'Tema del sistema', light: 'Tema claro', dark: 'Tema oscuro' } as const
@@ -98,6 +99,7 @@ export function Layout() {
 
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <RunDialog />
+      <BackgroundTasks />
       <Toaster />
     </div>
   )

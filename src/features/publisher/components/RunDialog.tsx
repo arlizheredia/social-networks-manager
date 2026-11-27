@@ -8,11 +8,11 @@ import { initials, parseFbUrl } from '../fb'
 import { useMedia, copyImage } from '../media'
 import { usePublisher } from '../store'
 import { cleanErr, failedItems, gate, hhmm, reasonOf } from '../logic'
-import { clearForm, closeRun, confirmTestOk, continueAuto, jumpTo, mark, panicStop, retryFailed, retryNow, runText, stepOpen, stopAfterCurrent, useRun, type RunState } from '../run'
+import { clearForm, closeRun, confirmTestOk, setRunBg, continueAuto, jumpTo, mark, panicStop, retryFailed, retryNow, runText, stepOpen, stopAfterCurrent, useRun, type RunState } from '../run'
 import type { HistoryEntry } from '../types'
 
 const STEP_P: [RegExp, number][] = [[/Comprobando/, 0.03], [/Preparando/, 0.05], [/Abriendo el grupo/, 0.1], [/Esperando a que cargue/, 0.2], [/cuadro de publicación/, 0.35], [/Escribiendo/, 0.5], [/Adjuntando/, 0.62], [/vista previa/, 0.72], [/«Publicar» esté/, 0.8], [/Publicando/, 0.9]]
-function autoPct(R: RunState, e: HistoryEntry) {
+export function autoPct(R: RunState, e: HistoryEntry) {
   const n = e.items.length || 1, done = e.items.filter((i) => i.status !== 'pending').length
   let f = 0
   if (R.autoRunning && !R.stop && R.phase === 'posting') for (const [rx, v] of STEP_P) if (rx.test(R.step || '')) f = v
@@ -225,7 +225,7 @@ export function RunDialog() {
     const it = e.items[R.idx]
     document.title = R.auto && R.autoRunning ? `${autoPct(R, e)} % · Publicando · Social Networks Manager` : it ? `▶ ${it.name} · Social Networks Manager` : 'Social Networks Manager'
   }, [R, e])
-  if (!R || !e) return null
+  if (!R || !e || R.bg) return null
   const done = e.items.filter((i) => i.status !== 'pending').length
   const finished = R.idx >= e.items.length
   const gated = !finished && !gate(state).ok && !(R.auto && (!R.autoRunning || R.stop))
@@ -237,6 +237,7 @@ export function RunDialog() {
           <h2 className="text-lg">{R.auto ? 'Publicación automática' : 'Publicación asistida'}</h2>
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-primary-container"><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${R.auto ? autoPct(R, e) : (done / e.items.length) * 100}%` }} /></div>
           <span className="text-sm whitespace-nowrap text-text-2 tabular-nums">{done} de {e.items.length}</span>
+          {!finished && <Button size="sm" variant="tonal" icon="picture_in_picture_alt" onClick={() => { setRunBg(true); toast('Publicación en segundo plano: sigue en curso. Tócala abajo para volver.', 'picture_in_picture_alt') }} title="Ocultar esta pantalla y seguir usando la app; la publicación continúa"><span className="hidden sm:inline">Segundo plano</span></Button>}
           <IconButton icon="close" label="Cerrar" onClick={() => closeRun()} />
         </div>
         <div className="flex min-h-0 flex-1">
