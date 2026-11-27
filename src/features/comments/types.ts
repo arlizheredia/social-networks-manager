@@ -5,6 +5,8 @@ export interface Attachment { type: string; url: string; title?: string; alt?: s
 export interface Comment {
   idx: number
   id: string
+  /** Cuándo se extrajo por primera vez (ISO). Base de los informes por fecha de extracción. */
+  extractedAt?: string
   parentId: string
   type: 'comment' | 'reply'
   depth: number
@@ -37,6 +39,8 @@ export interface Comment {
   sentimentFrom?: string
   sentimentOwn?: number
   brandStance?: boolean
+  /** habla de la marca sin nombrarla (p. ej. «los envíos los cobran bien caro» en una publicación de la marca) */
+  aboutBrand?: boolean
   sentimentManual?: boolean
   sentimentAuto?: Sentiment
   platform: Platform

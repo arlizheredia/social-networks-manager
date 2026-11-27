@@ -135,12 +135,16 @@ export function focusKeywords(q: string) {
 export const focusTextOf = (c: Comment) => { const t = normName((c.text || '') + ' ' + (c.mentions || []).join(' ')).replace(/k/g, 'c').replace(/z/g, 's'); return t + ' ' + t.replace(/[\s\-_.]+/g, '') }
 export const fkey = (c: Comment) => (c._ref?.postId || '') + '|' + normName((c.authorName || '') + ' ' + (c.text || '')).slice(0, 160)
 
+/** ¿El enfoque es la propia marca? (entonces cuentan también los comentarios que hablan de ella sin nombrarla) */
+export const focusIsBrand = (q: string) => { const bk = brandKeys(false); return focusKeywords(q).some((k) => brandIn(k, bk)) }
+
 export async function focusMatch(list: Comment[], q: string, onProg?: (a: number, b: number) => void) {
   const kws = focusKeywords(q), keys = new Set<string>(), items = list.filter((c) => c.text?.trim())
+  const implicit = focusIsBrand(q)
   if (!items.length) return keys
   const need: Comment[] = []
   items.forEach((c) => {
-    if (kws.some((k) => focusTextOf(c).includes(k))) keys.add(fkey(c))
+    if (kws.some((k) => focusTextOf(c).includes(k)) || (implicit && c.aboutBrand)) keys.add(fkey(c))
     else if (normName(c.text).split(/[^a-z0-9ñ]+/).filter((w) => w.length > 1).length >= 5) need.push(c)
   })
   if (need.length) {
@@ -149,7 +153,7 @@ export async function focusMatch(list: Comment[], q: string, onProg?: (a: number
     need.forEach((c, i) => { if (dot(qv, vs[i]) >= FOCUS_TH) keys.add(fkey(c)) })
   }
   const byId = new Map(list.map((c) => [c.id, c]))
-  list.forEach((c) => { if (!c.isTeam && (c.teamAnswered || c.brandStance)) keys.add(fkey(c)) })
+  list.forEach((c) => { if (!c.isTeam && (c.teamAnswered || c.brandStance || (implicit && c.aboutBrand))) keys.add(fkey(c)) })
   list.forEach((c) => {
     if (c.isTeam || !c.parentId) return
     let p = c, g = 0

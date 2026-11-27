@@ -15,10 +15,10 @@ export function focusSubj(q: string) {
 }
 export const focusName = (q: string) => { const s = focusSubj(q); return s.split(/\s+/).length > 3 ? `«${s}»` : s }
 
-export function brandKeys() {
+export function brandKeys(withFocus = true) {
   const r = getPrefs().report
   const ks = new Set<string>()
-  ;[r.focus || 'Kanasta24', r.client || 'Kanasta24', r.terms || ''].join(',').split(/[,;]/).forEach((s) => {
+  ;[withFocus ? r.focus || 'Kanasta24' : '', r.client || 'Kanasta24', r.terms || ''].join(',').split(/[,;]/).forEach((s) => {
     normL(focusSubj(s)).split(/[^a-z0-9ñ]+/).filter((w) => w.length >= 4 && !/^(comentarios?|relacionad[oa]s?|marca|sobre)$/.test(w))
       .forEach((w) => { ks.add(w); ks.add(w.replace(/\d+$/, '')); ks.add(w.replace(/k/g, 'c')) })
   })
@@ -35,6 +35,21 @@ const PREFER_RE = /(^|[^\p{L}])(prefiero|preferible|me quedo con|es preferible)(
 const PRAISE_OTHER_RE = /(^|[^\p{L}])(menos de \d+ horas|en (menos de )?\d+ horas|productos de calidad|es lo mejor|lo mejor|mejor calidad|mejores precios|mucho mejor|es mejor|son mejores|mas barat[oa]s?|mas competitiv[oa]s?|bajando (todos )?(sus |los )?precios|mas rapid[oa]s?|mas economic[oa]s?|muy superior)(?=$|[^\p{L}])/u
 /** Cuenta que compra o recibe en otro sitio: «me envían todo con…», «yo compro en…», «siempre pido a…». */
 const USE_OTHER_RE = /(^|[^\p{L}])(me (envian|traen|mandan|entregan|llevan|resuelven)|(yo |siempre |ahora )?(compro|pido|encargo) (en|con|a|por)|les? compro|me (llega|llegan) (todo )?(con|por|de)|yo uso|uso (la|el) (app|aplicacion|pagina|tienda))(?=$|[^\p{L}])/u
+/**
+ * Referencias implícitas a la tienda de la publicación: hablan de ella sin nombrarla, en tercera persona del plural
+ * («los cobran», «son los que tienen el precio más caro», «enviaba por ahí») o dirigiéndose a ella («ustedes», «su servicio»).
+ */
+const IMPLICIT_RE = /(^|[^\p{L}])(cobran|cobraron|venden|vendieron|tienen|tenian|envian|enviaron|entregan|entregaron|mandan|mandaron|demoran|tardan|tardaron|ponen|piden|estan cobrando|son (los|las) (que|mas)|(los|las) (mas|unicos|unicas) (car[oa]s|barat[oa]s|rapid[oa]s|lent[oa]s)|ustedes|con ellos|a ellos|por ahi|por aqui|por aca|aqui|aca|esta (tienda|pagina|empresa|agencia|plataforma)|este (negocio|sitio|servicio|lugar)|la pagina|su (servicio|precio|atencion|pagina|tienda|envio|entrega|trabajo)|sus (precios|envios|entregas|combos|productos|servicios|ofertas))(?=$|[^\p{L}])/u
+/** Trato directo a la tienda que expresa opinión aunque no hable de compras («ustedes son los mejores», «sigan así»). */
+const DIRECT_RE = /(^|[^\p{L}])(ustedes son|gracias a ustedes|los felicito|las felicito|sigan asi|sigan adelante|su (servicio|atencion|trabajo) (es|fue))(?=$|[^\p{L}])/u
+const BIZ_RE = /(^|[^\p{L}])(cobr\w*|pag\w*|atencion|demora\w*|tard\w*|llega\w*|envi\w*|vend\w*|compr\w*)(?=$|[^\p{L}])/u
+/** ¿Habla de la marca sin nombrarla? (no se aplica a comentarios en páginas de la competencia) */
+export function talksAboutBrand(text: string, opts: { rivalPage?: boolean } = {}) {
+  if (opts.rivalPage) return false
+  const t = normL(text)
+  if (DIRECT_RE.test(t)) return true
+  return IMPLICIT_RE.test(t) && (COMMERCE_RE.test(t) || BIZ_RE.test(t))
+}
 export const COMMERCE_RE = /(^|[^\p{L}])(precios?|barat[oa]s?|car[oa]s?|calidad|entregas?|entregar|envios?|enviar|pedidos?|compras?|comprar|tiendas?|bodegas?|servicio|ofertas?|combos?|horas|domicilio|competitiv[oa]s?|economic[oa]s?|productos?|mercado)(?=$|[^\p{L}])/u
 export const ENTITY_STOP = new Set('la el los las lo es pues hola mira yo tu mi su ademas pero y o que si no ya me te le hoy ahi aqui eso esto este esta muy mas bueno gracias buenas buenos dias senor senora'.split(' '))
 
@@ -47,6 +62,9 @@ function brandStance(list: Comment[]) {
     const people = [c.replyTo, ...(c.mentions || []), c.authorName].filter(Boolean).map(normL)
     people.forEach((n) => { if (n) t = t.split(n).join(' ') })
     const brand = brandIn(t, keys)
+    // en una página de la competencia, las referencias implícitas son a esa tienda, no a la marca
+    const pa = String((c as Comment & { _postAuthor?: string })._postAuthor || '').trim()
+    if (!brand && talksAboutBrand(c.text, { rivalPage: !!pa && !brandIn(normL(pa), keys) })) c.aboutBrand = true
     let why = ''
     if (AVOID_RE.test(t)) why = 'recomienda no comprar'
     else if (PREFER_RE.test(t) && !brand && COMMERCE_RE.test(t)) why = 'prefiere otra opción'
@@ -109,7 +127,7 @@ function applySentOverrides(list: Comment[]) {
     c.sentimentManual = true; c.sentimentFrom = 'cambiado a mano'
   })
 }
-const SENT_TMP = ['sentimentFrom', 'sentimentOwn', 'brandStance', 'sentimentManual', 'sentimentAuto'] as const
+const SENT_TMP = ['sentimentFrom', 'sentimentOwn', 'brandStance', 'aboutBrand', 'sentimentManual', 'sentimentAuto'] as const
 export function rescoreSentiment(list: Comment[]) {
   list.forEach((c) => { const s = sentiment(c.text || ''); c.sentiment = s.label; c.sentimentScore = s.score; SENT_TMP.forEach((k) => delete c[k]) })
   brandStance(list); applySentOverrides(list); inheritAgreement(list, new Map(list.map((c) => [c.id, c])))

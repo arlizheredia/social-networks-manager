@@ -3,7 +3,7 @@ import { create } from 'zustand'
 import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval'
 import { toast } from '@/components/ui'
 import { generate, parseJsonLoose, withTask } from '@/features/ai/engine'
-import { computeTeam, fkey, focusKeywords, focusMatch, focusTextOf, semanticScores } from './analysis'
+import { computeTeam, fkey, focusKeywords, focusMatch, focusTextOf, semanticScores, focusIsBrand } from './analysis'
 import { useAI } from '@/features/ai/engine'
 import { finalize, prepare, rescoreSentiment, setSentOverride } from './normalize'
 import { getPrefs, setPrefs, usePrefs } from './prefs'
@@ -71,7 +71,8 @@ export function applyTeam() {
   if (cached) { set({ teamOn: computeTeam(list, pa, (c) => cached.keys!.has(fkey(c))), version: Date.now() }); return }
   // 1) palabras clave del enfoque (inmediato)
   const kws = focusKeywords(q)
-  set({ teamOn: computeTeam(list, pa, (c) => kws.some((k) => focusTextOf(c).includes(k))), focus: { q, keys: null, ai: false }, version: Date.now() })
+  const implicit = focusIsBrand(q)
+  set({ teamOn: computeTeam(list, pa, (c) => (implicit && !!c.aboutBrand) || kws.some((k) => focusTextOf(c).includes(k))), focus: { q, keys: null, ai: false }, version: Date.now() })
   // 2) por significado con la IA, en segundo plano
   if (!useAI.getState().installed) return
   const run = ++focusRun
