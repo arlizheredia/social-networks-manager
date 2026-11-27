@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Banner, Button, Dialog, Field, Icon, IconButton, Input, Switch, Textarea, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText } from '@/lib/util'
-import { useAI } from '@/features/ai/engine'
+import { useAI, warmLLM } from '@/features/ai/engine'
 import { publisherCommand, useExtension } from '@/features/extension/bridge'
 import { usePublisher } from '@/features/publisher/store'
 import { normName } from '../db'
-import { addReply, aiReplies, fillTemplate, markAnswered, suggestScore, useExplore } from '../explore'
+import { addReply, aiReply, fillTemplate, quickReplies, markAnswered, suggestScore, useExplore } from '../explore'
 import { setPrefs, usePrefs } from '../prefs'
 import type { Comment } from '../types'
 
@@ -47,7 +47,7 @@ export function ReplyDialog({ queue, start, onClose }: { queue: Comment[]; start
   const [i, setI] = useState(start)
   const [text, setText] = useState('')
   const [sel, setSel] = useState<string | null>(null)
-  const [ai, setAi] = useState<{ for: string; items: string[]; loading: boolean } | null>(null)
+  const [ai, setAi] = useState<{ for: string; item: string | null; loading: boolean } | null>(null)
   const [mention, setMention] = useState(true)
   const [q, setQ] = useState('')
   const [sending, setSending] = useState(false)
@@ -57,7 +57,13 @@ export function ReplyDialog({ queue, start, onClose }: { queue: Comment[]; start
   const win = usePublisher((x) => x.settings.autoWin)
   const c = queue[i]
   const opts = c ? [...prefs.replies].filter((r) => !q || normName(r.title + ' ' + r.text).includes(normName(q))).sort((a, b) => suggestScore(b, c) - suggestScore(a, c)) : []
-  useEffect(() => { if (c && opts[0]) { setSel(opts[0].id); setText(fillTemplate(opts[0].text, c)) } else setText('') }, [c?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const quick = c ? quickReplies(c) : []
+  const iRef = useRef(i), editedRef = useRef(false)
+  iRef.current = i
+  useEffect(() => { editedRef.current = false; if (c) { setSel(null); setText(quickReplies(c)[0] || '') } }, [c?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  // La IA redacta sola al llegar a cada comentario; el modelo se carga al abrir el diálogo
+  useEffect(() => { if (aiReady) void warmLLM() }, [aiReady])
+  useEffect(() => { if (c && aiReady && !done[c.id]) void suggest(true) }, [c?.id, aiReady]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!c) return null
   const final = () => { let t = text.trim(); if (c.platform !== 'facebook' && mention) { const u = '@' + c.authorName.replace(/^@/, ''); if (!t.startsWith(u)) t = u + ' ' + t } return t }
   /** Pasa al siguiente; en el último se queda abierto: solo el usuario cierra el diálogo. */
@@ -80,10 +86,15 @@ export function ReplyDialog({ queue, start, onClose }: { queue: Comment[]; start
     } catch (e) { toast(`No se pudo responder: ${(e as Error).message}`) }
     finally { setSending(false) }
   }
-  const suggest = async () => {
-    setAi({ for: c.id, items: [], loading: true })
-    try { const items = await aiReplies(c); setAi({ for: c.id, items, loading: false }); if (items[0]) { setText(items[0]); setSel(null) } }
-    catch (e) { setAi(null); toast('IA: ' + (e as Error).message) }
+  async function suggest(auto = false) {
+    const cur = queue[iRef.current]
+    if (!cur) return
+    const id = cur.id
+    setAi({ for: id, item: null, loading: true })
+    const item = await aiReply(cur)
+    setAi((a) => (a?.for === id ? { for: id, item, loading: false } : a))
+    if (!item) { if (!auto) toast('La IA no dio una respuesta adecuada; usa una de las sugeridas') }
+    else if (queue[iRef.current]?.id === id && !editedRef.current) { setText(item); setSel(null) }
   }
   return (
     <Dialog open onClose={onClose} wide title={`Responder a ${c.authorName || 'comentario'}`}
@@ -105,24 +116,29 @@ export function ReplyDialog({ queue, start, onClose }: { queue: Comment[]; start
       <div className="grid gap-4 md:grid-cols-2">
         <div>
           <div className="mb-2 flex items-center gap-2"><h3 className="flex-1 text-base">Respuestas</h3>
-            <Button size="sm" variant="tonal" icon={ai?.loading ? 'progress_activity' : 'auto_awesome'} disabled={!aiReady || ai?.loading} onClick={suggest} title={aiReady ? '' : 'Instala la IA de la app'}>Sugerir con IA</Button>
+            <Button size="sm" variant="tonal" icon={ai?.loading ? 'progress_activity' : 'auto_awesome'} disabled={!aiReady || ai?.loading} onClick={() => void suggest()} title={aiReady ? '' : 'Instala la IA de la app'}>{ai?.loading && ai.for === c.id ? 'Redactando…' : 'Redactar con IA'}</Button>
           </div>
           <Input icon="search" placeholder="Buscar respuesta" value={q} onChange={(e) => setQ(e.target.value)} className="!h-10" />
           <div className="mt-2 max-h-72 space-y-1.5 overflow-y-auto" role="listbox">
-            {ai?.for === c.id && ai.items.map((t, k) => (
-              <button key={'ai' + k} role="option" aria-selected={text === t} onClick={() => { setText(t); setSel(null) }} className={cn('block w-full rounded-xl border p-2 text-left text-sm', text === t ? 'border-primary bg-primary-container/40' : 'border-outline-2 hover:bg-text/4')}>
-                <span className="mb-0.5 flex items-center gap-1 text-xs text-primary"><Icon name="auto_awesome" fill className="!text-[14px]" />IA · Sugerencia {k + 1}</span>{t}
+            {ai?.for === c.id && ai.item && [ai.item].map((t) => (
+              <button key="ai" role="option" aria-selected={text === t} onClick={() => { editedRef.current = true; setText(t); setSel(null) }} className={cn('block w-full rounded-xl border p-2 text-left text-sm', text === t ? 'border-primary bg-primary-container/40' : 'border-outline-2 hover:bg-text/4')}>
+                <span className="mb-0.5 flex items-center gap-1 text-xs text-primary"><Icon name="auto_awesome" fill className="!text-[14px]" />Redactada por la IA</span>{t}
+              </button>
+            ))}
+            {!q && quick.map((t, k) => (
+              <button key={'q' + k} role="option" aria-selected={!sel && text === t} onClick={() => { editedRef.current = true; setText(t); setSel(null) }} className={cn('block w-full rounded-xl border p-2 text-left text-sm', !sel && text === t ? 'border-primary bg-primary-container/40' : 'border-outline-2 hover:bg-text/4')}>
+                <span className="mb-0.5 flex items-center gap-1 text-xs text-primary"><Icon name="bolt" fill className="!text-[14px]" />Sugerida para este comentario</span>{t}
               </button>
             ))}
             {opts.map((r, k) => (
-              <button key={r.id} role="option" aria-selected={sel === r.id} onClick={() => { setSel(r.id); setText(fillTemplate(r.text, c)) }} className={cn('block w-full rounded-xl border p-2 text-left text-sm', sel === r.id ? 'border-primary bg-primary-container/40' : 'border-outline-2 hover:bg-text/4')}>
+              <button key={r.id} role="option" aria-selected={sel === r.id} onClick={() => { editedRef.current = true; setSel(r.id); setText(fillTemplate(r.text, c)) }} className={cn('block w-full rounded-xl border p-2 text-left text-sm', sel === r.id ? 'border-primary bg-primary-container/40' : 'border-outline-2 hover:bg-text/4')}>
                 <span className="mb-0.5 block text-xs font-medium">{r.title}{k === 0 && suggestScore(r, c) > 0 ? ' · Sugerida' : ''}</span><span className="text-text-2">{fillTemplate(r.text, c)}</span>
               </button>
             ))}
           </div>
         </div>
         <div>
-          <Field label="Tu respuesta" hint={`${[...text].length} caracteres`}><Textarea rows={7} value={text} onChange={(e) => setText(e.target.value)} /></Field>
+          <Field label="Tu respuesta" hint={`${[...text].length} caracteres`}><Textarea rows={7} value={text} onChange={(e) => { editedRef.current = true; setText(e.target.value) }} /></Field>
           {c.platform !== 'facebook' && <Switch label={`Empezar con @${c.authorName.replace(/^@/, '')}`} checked={mention} onChange={setMention} />}
           <Button variant="text" size="sm" icon="bookmark_add" disabled={!text.trim()} onClick={() => {
             const name = c.authorName.replace(/^@/, ''), first = name.split(/\s+/)[0]

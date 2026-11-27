@@ -56,8 +56,16 @@ self.onmessage = async (e: MessageEvent<Msg>) => {
     } else if (m.type === 'gen') {
       const gen = await load('llm', m.model, 'text-generation', m.tries, m.lib, id), t = await lib(m.lib)
       let n = 0
-      const opts = { ...m.opts }
-      if (t.TextStreamer && gen.tokenizer) opts.streamer = new t.TextStreamer(gen.tokenizer, { skip_prompt: true, skip_special_tokens: true, callback_function: () => { n++; post({ id, type: 'step', a: n, b: m.opts.max_new_tokens }) } })
+      const { stopAtLine, ...opts } = m.opts
+      // stopAtLine: corta en cuanto la respuesta termina la primera línea (respuestas cortas, mucho más rápido)
+      const stop = stopAtLine && t.InterruptableStoppingCriteria ? new t.InterruptableStoppingCriteria() : null
+      if (stop) opts.stopping_criteria = stop
+      let acc = ''
+      if (t.TextStreamer && gen.tokenizer) opts.streamer = new t.TextStreamer(gen.tokenizer, { skip_prompt: true, skip_special_tokens: true, callback_function: (x: string) => {
+        n++; post({ id, type: 'step', a: n, b: m.opts.max_new_tokens })
+        acc += x || ''
+        if (stop && /\S[^\n]*\n/.test(acc)) stop.interrupt()
+      } })
       const out = await gen(m.messages, opts), g = out[0].generated_text
       post({ id, type: 'done', result: Array.isArray(g) ? g[g.length - 1].content || '' : String(g || '') })
     }

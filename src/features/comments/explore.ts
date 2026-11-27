@@ -9,6 +9,7 @@ import { finalize, prepare, rescoreSentiment, setSentOverride } from './normaliz
 import { getPrefs, setPrefs, usePrefs } from './prefs'
 import { appendToResult } from './tracking'
 import { normName } from './db'
+import { firstName, intentOf, parseAIReplies, INTENT_HINT, templateReplies } from './replies'
 import type { Comment, Meta, Parsed, Sentiment } from './types'
 
 export type SearchMode = 'sem' | 'ai'
@@ -195,16 +196,23 @@ export async function addReply(parent: Comment, text: string, r: { author?: stri
   if (parent._ref) await appendToResult(parent._ref.tid, parent._ref.postId, raw).catch(() => false)
   return c
 }
-export async function aiReplies(c: Comment, n = 3): Promise<string[]> {
-  const examples = getPrefs().replies.slice(0, 4).map((r) => `- ${r.text}`).join('\n')
-  const brand = getPrefs().report.client || useExplore.getState().meta?.postAuthor || 'la marca'
-  const sys = `Eres el community manager de ${brand}. Respondes comentarios de redes sociales en español con un tono cordial, breve (1 a 3 frases) y humano. No inventes datos, precios ni promesas. Si hay un problema, invita a escribir por mensaje privado. Responde SOLO con JSON: {"respuestas":["…","…"]}.`
-  const user = `Comentario de ${c.authorName || 'una persona'} (${c.sentiment}${c.isQuestion ? ', pregunta' : ''}):\n«${c.text}»\n\nEscribe ${n} respuestas distintas.\nEjemplos del estilo de la marca:\n${examples}`
-  const txt = await withTask('Pensando sugerencias', (p) => generate(sys, user, { onProgress: p }))
-  const j = parseJsonLoose<{ respuestas?: string[] } | string[]>(txt)
-  const arr = Array.isArray(j) ? j : j?.respuestas
-  const out = (Array.isArray(arr) ? arr : String(txt).split(/\n+/)).map((x) => String(x).replace(/^[-*\d.)\s"]+|"$/g, '').trim()).filter((x) => x.length > 3)
-  return out.slice(0, n)
+/** Cliente o marca para las respuestas: el de Preferencias o, si no hay, la página del seguimiento. */
+export const replyBrand = () => getPrefs().report.client?.trim() || useExplore.getState().meta?.postAuthor || ''
+
+/** Sugerencias al instante, sin IA: respuestas según la intención del comentario y con la marca. */
+export const quickReplies = (c: Comment, n = 3) => templateReplies(c, n, replyBrand())
+
+/** Una respuesta redactada por la IA (texto corto, sin JSON). Se corta al terminar la primera línea; tiempo máximo 20 s; solo se acepta si pasa la guarda de calidad. */
+export async function aiReply(c: Comment): Promise<string | null> {
+  const brand = replyBrand(), name = firstName(c), ex = templateReplies(c, 1, brand)[0]
+  const sys = `Eres el community manager de ${brand || 'una tienda de combos de comida a domicilio'}. Contestas comentarios de Facebook en nombre de ${brand || 'la tienda'}. Escribe UNA sola respuesta en español, de 1 o 2 frases, cordial y dirigida a ${name || 'la persona'}. No inventes precios, plazos ni datos. Escribe solo la respuesta, sin comillas ni explicaciones.`
+  const user = `${INTENT_HINT[intentOf(c)]}\nComentario de ${name || 'una persona'}: ${c.text.slice(0, 300)}\nEjemplo de buena respuesta: ${ex}\nTu respuesta (distinta del ejemplo):`
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 20_000)
+  try {
+    const txt = await withTask('Redactando una respuesta', (p) => generate(sys, user, { onProgress: p, maxTokens: 60, temperature: 0.3, stopAtLine: true, signal: ctl.signal }))
+    const r = parseAIReplies(txt, c).find((x) => normName(x) !== normName(ex))
+    return r || null
+  } catch { return null } finally { clearTimeout(timer) }
 }
 
 /* ---------- Datos de ejemplo ---------- */
