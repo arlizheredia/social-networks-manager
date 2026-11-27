@@ -1,85 +1,54 @@
-import { useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Banner, Button, Card, CardHead, Icon, Input, PageHead, Switch, Tabs, toast } from '@/components/ui'
+import { useEffect, useState } from 'react'
+import { Banner, Button, Card, CardHead, Icon, IconButton, Input, PageHead, Switch, Tabs, confirmBox, toast } from '@/components/ui'
 import { usePrefs } from '@/features/comments/prefs'
-import { countTxt, useTR, trackTs } from '@/features/comments/tracking'
+import { countTxt, useTR } from '@/features/comments/tracking'
 import { useAI } from '@/features/ai/engine'
 import { NeedsAI } from '@/features/ai/AIDialog'
 import { buildCompetitionModel, headlineOf, tracksInRange, type CompModel } from '@/features/competition/analyze'
-import { compHtml, compTitle } from '@/features/competition/html'
+import { compHtml, compTitle, consolidatedHtml } from '@/features/competition/html'
 import { CompDashboard } from '@/features/competition/Dashboard'
-import { saveCompReport, setComp, setRun, useCompRun, useCompetition } from '@/features/competition/store'
+import { analysisName, createAnalysis, deleteAnalysis, loadCompHistory, provKey, runsOf, saveCompReport, setComp, setRun, useCompHistory, useCompRun, useCompetition, type Analysis } from '@/features/competition/store'
+import { PROVINCES, type Province } from '@/features/competition/data'
+import { collapseRows } from '@/lib/motion'
 import { pruneNonBusiness } from '@/features/competition/discover'
-import { CompReportView, CompetitorsTab, ProvincePicker, compFileName, runResearch } from '@/features/competition/components'
+import { CompReportView, CompetitorsTab, ProvincePicker, compFileName, runResearch, stamp } from '@/features/competition/components'
 import { useExtension } from '@/features/extension/bridge'
 
 const ymd = (t: number) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 
-/** Pasos de la generación con su tramo de porcentaje (con búsqueda en Internet; sin ella, solo el análisis en 0–100 %). */
-const WEB_STEPS = [
-  { label: 'Buscar en Google', icon: 'travel_explore', to: 21 },
-  { label: 'Leer los sitios encontrados', icon: 'language', to: 31 },
-  { label: 'Revisar los competidores y la ficha de tu marca', icon: 'storefront', to: 40 },
-]
-const ANALYSIS_STEPS = [
-  { label: 'Reunir los comentarios de los seguimientos', icon: 'forum', to: 5 },
-  { label: 'Detectar a la competencia en los comentarios', icon: 'person_search', to: 35 },
-  { label: 'Analizar pagos, cobertura y precios', icon: 'payments', to: 60 },
-  { label: 'Comparativa, combos y nivel de amenaza', icon: 'compare_arrows', to: 65 },
-  { label: 'Redactar el resumen', icon: 'edit_note', to: 100 },
-]
-/** Progreso al estilo de la publicación en grupos: a la izquierda el anillo con el porcentaje; a su lado, el estado y su descripción. */
-export function RunProgress({ step, pct, web }: { step: string; pct: number; web: boolean }) {
-  const steps = web ? [...WEB_STEPS, ...ANALYSIS_STEPS.map((s) => ({ ...s, to: 40 + s.to * 0.6 }))] : ANALYSIS_STEPS
-  const cur = Math.max(0, steps.findIndex((s) => pct < s.to)), now = steps[cur]
-  const C = 2 * Math.PI * 34
-  return (
-    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl bg-surface-2 p-5 sm:flex-row sm:gap-8 sm:p-6" role="status" aria-live="polite">
-      <div className="relative size-28 shrink-0" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="Progreso del informe">
-        <svg viewBox="0 0 80 80" className="size-28 -rotate-90"><circle cx="40" cy="40" r="34" className="fill-none stroke-primary-container" strokeWidth="7" /><circle cx="40" cy="40" r="34" className="fill-none stroke-primary transition-[stroke-dashoffset] duration-500" strokeWidth="7" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - pct / 100)} /></svg>
-        <b className="absolute inset-0 grid place-items-center font-display text-xl tabular-nums">{pct} %</b>
-      </div>
-      {/* el anillo y el texto, centrados como un bloque en el área */}
-      <div className="min-w-0 sm:max-w-xl">
-        <div className="mb-1 flex items-center gap-2 text-xs font-medium text-primary"><Icon name={now.icon} className="!text-[18px]" />Paso {cur + 1} de {steps.length}</div>
-        <h4 className="mb-1 text-base">{now.label}</h4>
-        <p className="text-sm text-text-2">{step}</p>
-        {cur > 0 && (
-          <ol className="mt-3 space-y-0.5 text-xs text-text-2">
-            {steps.slice(Math.max(0, cur - 3), cur).map((s) => <li key={s.label} className="flex items-center gap-1.5"><Icon name="check_circle" className="!text-[16px] text-success" />{s.label}</li>)}
-          </ol>
-        )}
-        <p className="mt-3 text-xs text-text-2">Puedes cambiar de pestaña o de sección: el informe se sigue generando.</p>
-      </div>
-    </div>
-  )
-}
+const fmtDay = (d: string) => new Date(d + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })
+const ago = (t: number) => { const s = (Date.now() - t) / 1000; return s < 3600 ? `hace ${Math.max(1, Math.round(s / 60))} min` : s < 86400 ? `hace ${Math.round(s / 3600)} h` : s < 2 * 86400 ? 'ayer' : `hace ${Math.round(s / 86400)} días` }
 
-function NewReport({ brand }: { brand: string }) {
-  const nav = useNavigate()
-  const provinces = useCompetition((s) => s.provinces)
+/**
+ * Análisis de la competencia: uno por conjunto de provincias. Se crea una vez y se actualiza cuando se quiera; cada
+ * actualización recoge la información nueva (comentarios, fichas, Internet) y queda como un informe del análisis.
+ */
+function Analyses({ brand }: { brand: string }) {
+  const analyses = useCompetition((s) => s.analyses)
   const comps = useCompetition((s) => s.competitors)
   const ignored = useCompetition((s) => s.ignored)
   const brandProfile = useCompetition((s) => s.brand)
+  const webSearch = useCompetition((s) => s.webSearch)
+  const hist = useCompHistory()
+  useEffect(() => { if (!useCompHistory.getState().loaded) loadCompHistory() }, [])
   const aiReady = useAI((s) => s.installed)
   const ext = useExtension((s) => s.publisher)
-  const webSearch = useCompetition((s) => s.webSearch)
   useTR((s) => s.tracks.length)
   // el estado vive fuera del componente: cambiar de pestaña o de sección no lo pierde
   const run0 = useCompRun()
-  const from = run0.from || ymd(Date.now() - 6 * 864e5), to = run0.to || ymd(Date.now())
-  const setFrom = (v: string) => setRun({ from: v }), setTo = (v: string) => setRun({ to: v })
-  const tracks = tracksInRange(from <= to ? from : to, from <= to ? to : from)
-  const skip = new Set(run0.skip), setSkip = (v: Set<string>) => setRun({ skip: [...v] })
-  // paso y porcentaje global: la búsqueda en Internet ocupa 0–40 % y el análisis 40–100 % (sin búsqueda, 0–100 %)
   const step = run0.step, pct = run0.pct
   const setStep = (v: string | null, p?: number) => setRun((st) => ({ step: v, pct: v == null ? 0 : p == null ? st.pct : Math.max(st.pct, Math.min(99, Math.round(p))) }))
-  const model = run0.model as CompModel | null, setModel = (m: CompModel | null) => setRun({ model: m })
-  const html = useMemo(() => (model ? compHtml(model) : ''), [model])
+  const [view, setView] = useState<{ html: string; title: string; file: string; model?: CompModel } | null>(null)
+  const model = run0.model as CompModel | null
+  // nuevo análisis
+  const [creating, setCreating] = useState(!analyses.length)
+  const [provs, setProvs] = useState<Province[]>([...PROVINCES])
+  const [since, setSince] = useState(ymd(Date.now() - 29 * 864e5))
+  const dup = analyses.find((a) => a.id === provKey(provs))
 
-  const run = async () => {
-    if (!provinces.length) { toast('Elige al menos una provincia'); return }
-    if (useCompRun.getState().step) return
+  const run = async (a: Analysis) => {
+    if (useCompRun.getState().step) { toast('Ya se está actualizando un análisis'); return }
+    setRun({ active: a.id, bg: false, done: null })
     setStep('Preparando…', 0)
     const withWeb = webSearch && !!ext
     setRun({ web: withWeb })
@@ -87,7 +56,7 @@ function NewReport({ brand }: { brand: string }) {
       // búsqueda en Internet (Google): ficha de la marca y competidores nuevos
       let bp = brandProfile, cs = comps
       let webInfo: CompModel['webInfo']
-      if (webSearch && ext) {
+      if (withWeb) {
         try {
           const r = await runResearch((x, p) => setStep(x || 'Buscando en Internet…', p == null ? undefined : p * 0.4), { maxAgeMs: 12 * 3600_000 })
           bp = r.brandProfile; cs = r.competitors
@@ -95,42 +64,84 @@ function NewReport({ brand }: { brand: string }) {
           if (r.error) toast(`Búsqueda en Internet: ${r.error} Se usan las fichas guardadas.`)
         } catch (e) { toast(`No se pudo buscar en Internet: ${(e as Error).message}. Se usan las fichas guardadas.`) }
       }
-      const lo = from <= to ? from : to, hi = from <= to ? to : from
-      const m = await buildCompetitionModel({ from: lo, to: hi, provinces, tids: tracks.filter((t) => !skip.has(t.id)).map((t) => t.id), competitors: cs, brandProfile: bp, ignored, webInfo, onStep: (x, p) => setStep(x || 'Terminando…', p == null ? undefined : withWeb ? 40 + p * 0.6 : p), onCompetitors: (list) => setComp({ competitors: list }) })
-      await saveCompReport({ id: 'r' + Date.now().toString(36), createdAt: Date.now(), from: lo, to: hi, provinces, brand: m.brand, author: m.author, headline: headlineOf(m), model: m })
-      setModel(m)
+      // comentarios desde el inicio del análisis hasta hoy, de los seguimientos con actividad en ese periodo
+      const lo = a.since, hi = ymd(Date.now())
+      const tids = tracksInRange(lo, hi).map((t) => t.id)
+      const m = await buildCompetitionModel({ from: lo, to: hi, provinces: a.provinces, tids, competitors: cs, brandProfile: bp, ignored, webInfo, onStep: (x, p) => setStep(x || 'Terminando…', p == null ? undefined : withWeb ? 40 + p * 0.6 : p), onCompetitors: (list) => setComp({ competitors: list }) })
+      await saveCompReport({ id: 'r' + Date.now().toString(36), analysisId: a.id, createdAt: Date.now(), from: lo, to: hi, provinces: a.provinces, brand: m.brand, author: m.author, headline: headlineOf(m), model: m })
+      setRun({ done: { id: a.id, at: Date.now(), model: m } })
       const fc = m.fichas?.created.length || 0
-      toast(`Informe creado y guardado en el historial${fc ? ` · la IA creó ${fc} ficha${fc === 1 ? '' : 's'} de competidor${fc === 1 ? '' : 'es'}` : ''}`, 'radar', { label: 'Ver historial', onClick: () => nav('/historial?tab=comp') })
-    } catch (e) { toast('No se pudo crear el informe: ' + (e as Error).message) }
-    finally { setStep(null) }
+      toast(`Análisis «${analysisName(a.provinces)}» actualizado${fc ? ` · la IA creó ${fc} ficha${fc === 1 ? '' : 's'} de competidor${fc === 1 ? '' : 'es'}` : ''}`, 'radar')
+    } catch (e) { toast('No se pudo actualizar el análisis: ' + (e as Error).message) }
+    finally { setStep(null); setRun({ active: null }) }
+  }
+  const create = () => {
+    if (!provs.length) { toast('Elige al menos una provincia'); return }
+    const { analysis, existed } = createAnalysis(provs, since)
+    if (existed) { toast('Ya existe un análisis con esas provincias: se actualiza ese'); }
+    setCreating(false)
+    run(analysis)
+  }
+  const openLatest = (a: Analysis) => {
+    const r = runsOf(hist.list, a)[0]
+    if (!r) return
+    const m = r.model as CompModel
+    setView({ html: compHtml(m), title: compTitle(m), file: compFileName(m.brand, m.generatedAt || r.createdAt), model: m })
+  }
+  const openEvolution = (a: Analysis) => {
+    const rs = runsOf(hist.list, a)
+    const b = (rs[0]?.model as CompModel | undefined)?.brand || brand
+    setView({ html: consolidatedHtml(rs), title: `Evolución de la competencia - ${analysisName(a.provinces)} - ${b}`, file: `Evolución de la competencia - ${analysisName(a.provinces)} - ${b}-${stamp(Date.now())}` })
   }
 
-  if (model) return <CompReportView html={html} title={compTitle(model)} file={compFileName(model.brand, model.generatedAt)} dashboard={<CompDashboard m={model} />} back={{ label: 'Nuevo informe', onClick: () => setModel(null) }} />
+  if (model) return <CompReportView html={compHtml(model)} title={compTitle(model)} file={compFileName(model.brand, model.generatedAt)} dashboard={<CompDashboard m={model} />} back={{ label: 'Volver a los análisis', onClick: () => setRun({ model: null }) }} />
+  if (view) return <CompReportView {...view} dashboard={view.model ? <CompDashboard m={view.model} /> : undefined} back={{ label: 'Volver a los análisis', onClick: () => setView(null) }} />
   return (
     <div className="space-y-4">
+      {!aiReady && <NeedsAI what="Buscar por significado en los comentarios y redactar el resumen" />}
       <Card>
-        <CardHead step={1} title="Provincias" sub="Elige las provincias del oriente que quieres analizar." />
-        <ProvincePicker value={provinces} onChange={(v) => setComp({ provinces: v })} />
+        <CardHead title="Análisis de la competencia" sub={<>Uno por conjunto de provincias. Actualízalo cuando quieras: cada actualización recoge la información nueva y queda en su informe (con su evolución). Marca base: <b className="font-medium text-text">{brand}</b></>}
+          actions={!creating && <Button size="sm" variant="tonal" icon="add" onClick={() => setCreating(true)}>Nuevo análisis</Button>} />
+        {analyses.length ? (
+          <div className="divide-y divide-outline-2 overflow-hidden rounded-2xl border border-outline-2">
+            {analyses.map((a) => {
+              const rs = runsOf(hist.list, a), last = rs[0], isRun = run0.active === a.id && !!step
+              return (
+                <div key={a.id} data-row-id={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name={isRun ? 'progress_activity' : 'radar'} className={isRun ? 'animate-spin' : ''} /></span>
+                  <div className="min-w-48 flex-1">
+                    <div className="font-medium">{analysisName(a.provinces)}</div>
+                    <div className="text-xs text-text-2">Comentarios desde el {fmtDay(a.since)} · {last ? `actualizado ${ago(last.createdAt)} · ${countTxt(rs.length, 'actualización', 'actualizaciones')}` : 'sin actualizar todavía'}</div>
+                    {last?.headline && <div className="mt-0.5 line-clamp-2 text-sm text-text-2">{last.headline}</div>}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    <Button size="sm" icon={isRun ? 'open_in_full' : 'refresh'} disabled={(!!step && !isRun) || !!run0.research} onClick={() => (isRun ? setRun({ bg: false }) : run(a))} title={isRun ? 'Mostrar la ventana de la actualización' : undefined}>{isRun ? `Actualizando ${pct} %` : 'Actualizar'}</Button>
+                    {last && <Button size="sm" variant="tonal" icon="description" onClick={() => openLatest(a)}>Ver informe</Button>}
+                    {rs.length > 1 && <Button size="sm" variant="text" icon="timeline" onClick={() => openEvolution(a)}>Evolución</Button>}
+                    <IconButton size="sm" icon="delete" label="Eliminar el análisis y sus informes" disabled={isRun} onClick={async () => { if (await confirmBox(`¿Eliminar el análisis «${analysisName(a.provinces)}»?`, `Se borrarán sus ${countTxt(rs.length, 'informe', 'informes')}. Las fichas de la competencia se conservan.`, 'Eliminar', true)) { await collapseRows([a.id]); await deleteAnalysis(a); toast('Análisis eliminado') } }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : !creating && <p className="text-text-2">Aún no hay análisis. Crea el primero con las provincias que te interesan.</p>}
       </Card>
+      {creating && (
+        <Card>
+          <CardHead title="Nuevo análisis" sub="Elige las provincias. No puede haber dos análisis con las mismas provincias: si ya existe, se actualiza ese." actions={analyses.length ? <Button size="sm" variant="text" onClick={() => setCreating(false)}>Cancelar</Button> : undefined} />
+          <div className="mb-3"><ProvincePicker value={provs} onChange={setProvs} /></div>
+          <label className="mb-3 block text-xs text-text-2">Comentarios desde<Input type="date" className="!h-10 max-w-48" max={ymd(Date.now())} value={since} onChange={(e) => setSince(e.target.value)} /></label>
+          {dup ? (
+            <Banner tone="warn" icon="block" action={<Button size="sm" icon="refresh" disabled={!!step} onClick={() => { setCreating(false); run(dup) }}>Actualizarlo</Button>}>
+              <b>Ya existe un análisis de {analysisName(dup.provinces)}.</b> No se puede crear otro con las mismas provincias; actualízalo para recoger la información nueva.
+            </Banner>
+          ) : <Button icon="radar" disabled={!provs.length || !!step || !!run0.research} onClick={create}>Crear y ejecutar el análisis</Button>}
+        </Card>
+      )}
       <Card>
-        <CardHead step={2} title="Periodo y comentarios" sub="El análisis de redes usa los seguimientos de comentarios completados en el periodo." />
-        <div className="mb-3 flex flex-wrap items-end gap-2">
-          <label className="text-xs text-text-2">Desde<Input type="date" className="!h-10" max={ymd(Date.now())} value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value) }} /></label>
-          <label className="text-xs text-text-2">Hasta<Input type="date" className="!h-10" max={ymd(Date.now())} value={to} onChange={(e) => { setTo(e.target.value); if (e.target.value < from) setFrom(e.target.value) }} /></label>
-        </div>
-        {tracks.length ? (
-          <div className="space-y-1">{tracks.map((t) => (
-            <label key={t.id} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={!skip.has(t.id)} onChange={(e) => { const s = new Set(skip); e.target.checked ? s.delete(t.id) : s.add(t.id); setSkip(s) }} /><span className="truncate">{t.name}</span><span className="text-xs text-text-2">· actualizado {new Date(trackTs(t)).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {countTxt(t.postIds.length, 'publicación', 'publicaciones')}</span></label>
-          ))}</div>
-        ) : <p className="text-text-2">No hay seguimientos completados en ese periodo: la IA no tendrá comentarios en los que buscar a la competencia y el informe usará solo las fichas que ya existen.</p>}
-      </Card>
-      <Card>
-        <CardHead step={3} title="Generar" sub={<>Marca base: <b className="font-medium text-text">{brand}</b> (Ajustes › General › Informes) · {comps.length ? countTxt(comps.length, 'competidor detectado', 'competidores detectados') : 'la IA detectará a los competidores al generar'}</>} />
-        {!aiReady && <div className="mb-3"><NeedsAI what="Buscar por significado en los comentarios y redactar el resumen" /></div>}
+        <CardHead title="Opciones de las actualizaciones" />
         <Switch label="Buscar en Internet (Google)" sub={ext ? `La extensión busca en Google a ${brand} y a la competencia de cada provincia, lee los sitios encontrados y la IA completa las fichas. Los competidores nuevos quedan por confirmar.` : 'Necesita la extensión de Chrome (Ajustes › Extensión).'} checked={webSearch && !!ext} onChange={(v) => setComp({ webSearch: v })} />
-        <Banner tone="info" icon="info" className="my-3">Además, la IA busca a la competencia en los comentarios del periodo. Si Google pide una verificación, la pestaña se abrirá al frente: resuélvela y la búsqueda seguirá sola.</Banner>
-        {step ? <RunProgress step={step} pct={pct} web={run0.web} />
-          : <Button icon="radar" disabled={!!run0.research || !provinces.length} onClick={run}>{run0.research ? 'Esperando la búsqueda en Internet…' : 'Generar informe de competencia'}</Button>}
+        <p className="mt-2 text-xs text-text-2">Además, la IA busca a la competencia en los comentarios de tus seguimientos desde el inicio de cada análisis ({comps.length ? countTxt(comps.length, 'competidor detectado', 'competidores detectados') : 'aún sin competidores detectados'}). Si Google pide una verificación, la pestaña se abrirá al frente: resuélvela y la búsqueda seguirá sola.</p>
       </Card>
     </div>
   )
@@ -146,9 +157,9 @@ export default function CompetitionPage() {
   return (
     <div>
       <PageHead title="Competencia" sub={<>Informes de la competencia de <b className="font-medium">{brand}</b> en las provincias del oriente, con lo que dicen tus seguimientos de comentarios.</>} />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'new', label: running ? `Nuevo informe · ${runPct} %` : 'Nuevo informe', icon: running ? 'progress_activity' : 'radar' }, { id: 'comps', label: researching ? 'Competidores · buscando…' : 'Competidores', icon: researching ? 'progress_activity' : 'storefront', badge: nComps || undefined }]} />
-      <div key={tab} className="anim-page">{tab === 'new' ? <NewReport brand={brand} /> : <CompetitorsTab brand={brand} />}</div>
-      <p className="mt-4 flex items-center gap-1 text-xs text-text-2"><Icon name="history" className="!text-[16px]" />Los informes quedan en Historial › Competencia, donde puedes crear consolidados.</p>
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'new', label: running ? `Análisis · ${runPct} %` : 'Análisis', icon: running ? 'progress_activity' : 'radar' }, { id: 'comps', label: researching ? 'Competidores · buscando…' : 'Competidores', icon: researching ? 'progress_activity' : 'storefront', badge: nComps || undefined }]} />
+      <div key={tab} className="anim-page">{tab === 'new' ? <Analyses brand={brand} /> : <CompetitorsTab brand={brand} />}</div>
+      <p className="mt-4 flex items-center gap-1 text-xs text-text-2"><Icon name="history" className="!text-[16px]" />Cada actualización queda también en Historial › Competencia.</p>
     </div>
   )
 }

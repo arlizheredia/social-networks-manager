@@ -7,6 +7,7 @@ import { usePublisher } from '@/features/publisher/store'
 import { entryTitle } from '@/features/publisher/logic'
 import { autoPct } from '@/features/publisher/components/RunDialog'
 import { putTracking, runTracking, setTrackBg, trackProgress, useTR } from '@/features/comments/tracking'
+import { analysisName, setRun as setCompRun, useCompRun, useCompetition } from '@/features/competition/store'
 
 /** Anillo de progreso pequeño con el porcentaje dentro. */
 function Ring({ pct, spin }: { pct: number | null; spin?: boolean }) {
@@ -58,6 +59,10 @@ export function BackgroundTasks() {
   const { runs, front } = useRun()
   const history = usePublisher((s) => s.history)
   const { runs: trRuns, bgIds, tracks } = useTR()
+  // actualización de un análisis de competencia en segundo plano
+  const comp = useCompRun()
+  const compAn = useCompetition((s) => s.analyses.find((a) => a.id === comp.active))
+  const compBg = !!comp.step && comp.bg
   const nav = useNavigate()
   const { pathname } = useLocation()
 
@@ -76,7 +81,7 @@ export function BackgroundTasks() {
   const trInt = tracks.filter((x) => x.interrupted && x.status === 'paused' && !trRuns.includes(x.id))
 
   // Recargar o cerrar la página durante una operación en curso: el navegador pide confirmación
-  const busy = runs.some((r) => !isDone(r)) || trRuns.length > 0
+  const busy = runs.some((r) => !isDone(r)) || trRuns.length > 0 || !!comp.step
   useEffect(() => {
     if (!busy) return
     const h = (ev: BeforeUnloadEvent) => { ev.preventDefault(); ev.returnValue = '' }
@@ -96,7 +101,7 @@ export function BackgroundTasks() {
     })
   })
 
-  if (!bgRuns.length && !trBg.length && !pubInts.length && !trInt.length) return null
+  if (!bgRuns.length && !trBg.length && !compBg && !pubInts.length && !trInt.length) return null
   const pubs = bgRuns.map((R) => {
     const e = entry(R.entryId)!
     const n = e.items.length, d = e.items.filter((i) => i.status !== 'pending').length
@@ -117,6 +122,7 @@ export function BackgroundTasks() {
   return (
     <div className="fixed top-[68px] right-3 left-3 z-30 flex max-h-[calc(100dvh-90px)] flex-col items-end gap-2 overflow-y-auto sm:left-auto md:right-4" aria-label="Procesos en segundo plano">
       {pubs}{tr}
+      {compBg && <Task icon="radar" title={`Análisis de la competencia · ${analysisName(compAn?.provinces || [])}`} sub={comp.step || 'Actualizando…'} pct={comp.pct} onOpen={() => setCompRun({ bg: false })} />}
       {pubInts.map((h) => { const d = h.items.filter((i) => i.status !== 'pending').length; return (
         <Interrupted key={h.id} icon="campaign" title={entryTitle(h)} sub={`Publicación interrumpida · ${d} de ${h.items.length} grupos`} pct={Math.round((d / h.items.length) * 100)}
           onContinue={() => startRun(h.id)} onDismiss={() => { setHidden((x) => [...x, h.id]); toast('Puedes continuarla desde Publicar o el Historial') }} />

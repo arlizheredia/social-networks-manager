@@ -67,8 +67,19 @@ export interface BrandProfile {
   combos?: Combo[]
 }
 
-interface CompState { competitors: Competitor[]; brand: BrandProfile; provinces: Province[]; /** Buscar competidores nuevos en Internet al generar. */ webSearch: boolean; /** Última búsqueda en Internet completa (para no repetirla en el mismo día). */ lastWeb?: { at: number; key: string } | null; /** Detectados que el usuario descartó (no se vuelven a crear). */ ignored: string[] }
+/**
+ * Análisis de la competencia: uno por conjunto de provincias (no se repite). Se actualiza cuando se quiere: cada
+ * ejecución analiza los comentarios desde `since` hasta ese día con las fichas al día, y queda como un informe más
+ * del análisis (para ver su evolución).
+ */
+export interface Analysis { id: string; provinces: Province[]; createdAt: number; /** inicio del periodo de comentarios (AAAA-MM-DD) */ since: string }
+/** Clave del conjunto de provincias (orden fijo): dos análisis no pueden tener la misma. */
+export const provKey = (ps: readonly string[]) => PROVINCES.filter((p) => ps.includes(p)).join('|')
+export const analysisName = (ps: readonly string[]) => (ps.length === PROVINCES.length ? 'Todo el oriente' : PROVINCES.filter((p) => ps.includes(p)).join(', '))
+
+interface CompState { analyses: Analysis[]; competitors: Competitor[]; brand: BrandProfile; provinces: Province[]; /** Buscar competidores nuevos en Internet al generar. */ webSearch: boolean; /** Última búsqueda en Internet completa (para no repetirla en el mismo día). */ lastWeb?: { at: number; key: string } | null; /** Detectados que el usuario descartó (no se vuelven a crear). */ ignored: string[] }
 export const useCompetition = create<CompState>()(persist(() => ({
+  analyses: [] as Analysis[],
   competitors: [] as Competitor[],
   brand: { coverage: {}, payments: [], deliveryHours: 0, publicPrices: false, reviews: '' } as BrandProfile,
   // por defecto, todo el oriente
@@ -76,9 +87,9 @@ export const useCompetition = create<CompState>()(persist(() => ({
   ignored: [] as string[],
   webSearch: true as boolean,
 }), {
-  name: 'snm.competition', version: 4,
+  name: 'snm.competition', version: 5,
   migrate: (p0, v) => {
-    const p = { ignored: [], webSearch: true, ...(p0 as object) } as unknown as CompState
+    const p = { analyses: [], ignored: [], webSearch: true, ...(p0 as object) } as unknown as CompState
     // antes el valor inicial era solo Santiago y Guantánamo: pasa a todo el oriente
     if (v < 3 && p.provinces?.length === 2 && p.provinces.includes('Santiago de Cuba') && p.provinces.includes('Guantánamo')) p.provinces = [...PROVINCES]
     return p
@@ -118,13 +129,21 @@ export interface CompRun {
   research: string | null
   researchPct: number
   tab: 'new' | 'comps'
+  /** Análisis que se está actualizando. */
+  active: string | null
+  /** La ventana flotante de la actualización está en segundo plano. */
+  bg: boolean
+  /** Última actualización terminada (se ofrece abrir su informe desde la ventana). */
+  done: { id: string; at: number; model: unknown } | null
 }
-export const useCompRun = create<CompRun>(() => ({ from: null, to: null, skip: [], step: null, pct: 0, web: false, model: null, research: null, researchPct: 0, tab: 'new' }))
+export const useCompRun = create<CompRun>(() => ({ from: null, to: null, skip: [], step: null, pct: 0, web: false, model: null, research: null, researchPct: 0, tab: 'new', active: null, bg: false, done: null }))
 export const setRun = useCompRun.setState
 
 /* ---------- Historial de informes ---------- */
 export interface SavedCompReport {
   id: string
+  /** Análisis al que pertenece (clave de sus provincias). */
+  analysisId?: string
   createdAt: number
   from: string
   to: string
@@ -144,6 +163,7 @@ export async function loadCompHistory() {
     const ks = await keys(st())
     const all = (await Promise.all(ks.map((k) => get<SavedCompReport>(k, st())))).filter(Boolean) as SavedCompReport[]
     useCompHistory.setState({ list: all.sort((a, b) => b.createdAt - a.createdAt), loaded: true })
+    syncAnalyses(all)
   } catch { useCompHistory.setState({ loaded: true }) }
 }
 export async function saveCompReport(r: SavedCompReport) {
@@ -153,4 +173,36 @@ export async function saveCompReport(r: SavedCompReport) {
 export async function deleteCompReports(ids: string[]) {
   await Promise.all(ids.map((id) => del(id, st())))
   useCompHistory.setState((s) => ({ list: s.list.filter((x) => !ids.includes(x.id)) }))
+}
+
+/** Informes de un análisis (de más reciente a más antiguo). */
+export const runsOf = (list: SavedCompReport[], a: Pick<Analysis, 'id'>) => list.filter((r) => (r.analysisId || provKey(r.provinces)) === a.id)
+/**
+ * Los informes anteriores se agrupan en análisis por su conjunto de provincias (uno por conjunto). Así los informes
+ * repetidos de las mismas provincias pasan a ser actualizaciones de un único análisis.
+ */
+export function syncAnalyses(reports: SavedCompReport[]) {
+  const cur = useCompetition.getState().analyses
+  const add: Analysis[] = []
+  reports.slice().sort((a, b) => a.createdAt - b.createdAt).forEach((r) => {
+    const id = r.analysisId || provKey(r.provinces)
+    if (!id || cur.some((x) => x.id === id) || add.some((x) => x.id === id)) return
+    add.push({ id, provinces: PROVINCES.filter((p) => r.provinces.includes(p)), createdAt: r.createdAt, since: r.from })
+  })
+  if (add.length) setComp((s) => ({ analyses: [...s.analyses, ...add] }))
+}
+/** Crea un análisis nuevo; si ya existe uno con esas provincias, devuelve ese (no se duplica). */
+export function createAnalysis(provinces: Province[], since: string): { analysis: Analysis; existed: boolean } {
+  const id = provKey(provinces)
+  const ex = useCompetition.getState().analyses.find((a) => a.id === id)
+  if (ex) return { analysis: ex, existed: true }
+  const analysis: Analysis = { id, provinces: PROVINCES.filter((p) => provinces.includes(p)), createdAt: Date.now(), since }
+  setComp((s) => ({ analyses: [...s.analyses, analysis] }))
+  return { analysis, existed: false }
+}
+/** Elimina un análisis y sus informes. */
+export async function deleteAnalysis(a: Analysis) {
+  const ids = runsOf(useCompHistory.getState().list, a).map((r) => r.id)
+  await deleteCompReports(ids)
+  setComp((s) => ({ analyses: s.analyses.filter((x) => x.id !== a.id) }))
 }

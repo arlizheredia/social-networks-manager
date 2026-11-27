@@ -10,7 +10,7 @@ import { activeGroups, awaitingItems, entryTitle, usage } from '@/features/publi
 import { ymd } from '@/features/publisher/report'
 import { useTR, trackProgress, inHistory, runTracking, newSince, trackTs } from '@/features/comments/tracking'
 import { getPrefs } from '@/features/comments/prefs'
-import { loadCompHistory, setRun, useCompetition, useCompHistory } from '@/features/competition/store'
+import { analysisName, loadCompHistory, setRun, useCompetition, useCompHistory } from '@/features/competition/store'
 import { useAI } from '@/features/ai/engine'
 import { useExtension } from '@/features/extension/bridge'
 import { useSettings } from '@/store/settings'
@@ -231,9 +231,9 @@ export default function HomePage() {
           ...(pr.comments ? [{ label: 'Crear informe', icon: 'summarize', run: () => nav(`/informes?t=${t.id}`) }] : []),
         ] }
     }),
-    ...compHist.list.map((r): Act => ({ at: r.createdAt, kind: 'comp', icon: 'radar', tone: 'bg-secondary-container text-on-secondary-container', title: r.brand ? `Informe de la competencia · ${r.brand}` : 'Informe de la competencia',
+    ...compHist.list.map((r): Act => ({ at: r.createdAt, kind: 'comp', icon: 'radar', tone: 'bg-secondary-container text-on-secondary-container', title: `Análisis de la competencia · ${analysisName(r.provinces)}`,
       sub: r.headline || `${r.from} a ${r.to}`, to: '/historial?tab=comp', badges: r.provinces?.length ? [{ text: `${r.provinces.length} provincias`, cls: 'bg-surface-3 text-text-2' }] : [],
-      actions: [{ label: 'Ver informes', icon: 'history', run: () => nav('/historial?tab=comp') }, { label: 'Nuevo', icon: 'radar', run: () => { setRun({ tab: 'new' }); nav('/competencia') } }] })),
+      actions: [{ label: 'Ver informes', icon: 'history', run: () => nav('/historial?tab=comp') }, { label: 'Actualizar', icon: 'refresh', run: () => { setRun({ tab: 'new' }); nav('/competencia') } }] })),
   ].filter((a) => a.at).sort((a, b) => b.at - a.at)
 
   const stats = (
@@ -336,7 +336,7 @@ export default function HomePage() {
               <ul className="mb-2 space-y-0.5">{topRivals.map((c) => <li key={c.id} className="flex items-center gap-2 text-sm"><Icon name="storefront" className="!text-[16px] text-text-2" /><span className="flex-1 truncate">{c.name}</span><span className="text-xs text-text-2 tabular-nums">{c.mentions ? `${fmtNum(c.mentions)} ${c.mentions === 1 ? 'mención' : 'menciones'}` : c.provinces.slice(0, 2).join(', ')}</span></li>)}</ul>
             )}
             <div className="flex flex-wrap gap-1">
-              <Button size="sm" icon="radar" onClick={() => { setRun({ tab: 'new' }); nav('/competencia') }}>Nuevo informe</Button>
+              <Button size="sm" icon="radar" onClick={() => { setRun({ tab: 'new' }); nav('/competencia') }}>Análisis</Button>
               {pendingRivals > 0 && <Button size="sm" variant="tonal" icon="fact_check" onClick={() => { setRun({ tab: 'comps' }); nav('/competencia') }}>Revisar {pendingRivals}</Button>}
               {lastComp && <Button size="sm" variant="text" icon="history" onClick={() => nav('/historial?tab=comp')}>Informes</Button>}
             </div>
