@@ -68,8 +68,8 @@ export function Layout() {
         </nav>
 
         <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 pt-2 pb-28 sm:px-6 md:pb-4 lg:pr-8">
-          {/* el inicio (panel) aprovecha todo el ancho; el resto de páginas, ancho de lectura */}
-          <div className={cn('mx-auto', pathname === '/' ? 'max-w-[1760px]' : 'max-w-[1200px]')}>
+          {/* un solo ancho máximo para todas las secciones: más amplio que antes, sin estirarse en pantallas muy grandes */}
+          <div className="mx-auto max-w-[1440px]">
             {!online && (
               <div role="alert" className="mb-4 flex items-center gap-3 rounded-2xl bg-error-container px-4 py-3 text-error">
                 <Icon name="wifi_off" />
