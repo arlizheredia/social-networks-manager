@@ -82,6 +82,20 @@ export function applyTeam() {
   }).catch(() => { /* se quedan las palabras clave */ })
 }
 export const refreshTeam = applyTeam
+/**
+ * ¿Trata el comentario del enfoque de los informes (Ajustes)? Con la IA, lo que decidió la búsqueda por significado;
+ * sin ella, las palabras clave del enfoque y, si el enfoque es la marca, también los que hablan de ella sin nombrarla.
+ * Las respuestas del equipo a esos comentarios se incluyen con ellos.
+ */
+export function focusPredicate(s: Pick<ExploreState, 'focus' | 'comments'>): ((c: Comment) => boolean) | null {
+  const q = getPrefs().report.focus.trim()
+  if (!q) return null
+  const keys = s.focus && s.focus.q === q ? s.focus.keys : null
+  const kws = focusKeywords(q), implicit = focusIsBrand(q)
+  const base = (c: Comment) => (keys ? keys.has(fkey(c)) : (implicit && !!c.aboutBrand) || !!c.brandStance || kws.some((k) => focusTextOf(c).includes(k)))
+  const roots = new Set(s.comments.filter((c) => !c.isTeam && base(c)).map((c) => c.root || c.id))
+  return (c) => (!c.isTeam ? base(c) : roots.has(c.root || c.id))
+}
 // si cambia el enfoque en Ajustes o se instala la IA, se recalcula
 usePrefs.subscribe((p, prev) => { if (p.report.focus !== prev.report.focus || p.team !== prev.team || p.teamPostAuthor !== prev.teamPostAuthor || p.teamAllReplies !== prev.teamAllReplies) { set({ focus: null }); applyTeam() } })
 useAI.subscribe((a, prev) => { if (a.installed && !prev.installed) { set({ focus: null }); applyTeam() } })
@@ -89,7 +103,8 @@ useAI.subscribe((a, prev) => { if (a.installed && !prev.installed) { set({ focus
 export function setSentiment(c: Comment, v: Sentiment | null) {
   setSentOverride(c, v)
   const list = useExplore.getState().comments
-  rescoreSentiment(list)
+  const mt = useExplore.getState().meta
+  rescoreSentiment(list, mt?.postAuthor || '', mt?.title || '')
   set({ comments: [...list], version: Date.now() })
 }
 

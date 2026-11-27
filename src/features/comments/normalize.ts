@@ -53,9 +53,23 @@ export function talksAboutBrand(text: string, opts: { rivalPage?: boolean } = {}
 export const COMMERCE_RE = /(^|[^\p{L}])(precios?|barat[oa]s?|car[oa]s?|calidad|entregas?|entregar|envios?|enviar|pedidos?|compras?|comprar|tiendas?|bodegas?|servicio|ofertas?|combos?|horas|domicilio|competitiv[oa]s?|economic[oa]s?|productos?|mercado)(?=$|[^\p{L}])/u
 export const ENTITY_STOP = new Set('la el los las lo es pues hola mira yo tu mi su ademas pero y o que si no ya me te le hoy ahi aqui eso esto este esta muy mas bueno gracias buenas buenos dias senor senora'.split(' '))
 
-function brandStance(list: Comment[]) {
+/**
+ * postAuthor / postText: autor y texto de la publicación cuando no vienen en cada comentario (una sola publicación
+ * abierta). Si la publicación habla de la marca (su texto, su título o su autor la nombran, p. ej. el reel de un
+ * influencer «Kanasta24 para todo el oriente del país»), sus comentarios están relacionados con ella aunque no la
+ * mencionen: el contexto de la publicación cuenta.
+ */
+function brandStance(list: Comment[], postAuthor = '', postText = '') {
   const keys = brandKeys()
   if (!keys.length) return
+  const ctxCache = new Map<string, boolean>()
+  const postAbout = (c: Comment) => {
+    const x = c as Comment & { _postTitle?: string; _post?: string; _postAuthor?: string }
+    const ctx = [x._postTitle, x._post, x._postAuthor, postText, postAuthor].filter(Boolean).join(' ')
+    if (!ctx) return false
+    if (!ctxCache.has(ctx)) ctxCache.set(ctx, brandIn(normL(ctx), keys))
+    return ctxCache.get(ctx)!
+  }
   list.forEach((c) => {
     if (!c.text) return
     let t = normL(c.text)
@@ -63,8 +77,10 @@ function brandStance(list: Comment[]) {
     people.forEach((n) => { if (n) t = t.split(n).join(' ') })
     const brand = brandIn(t, keys)
     // en una página de la competencia, las referencias implícitas son a esa tienda, no a la marca
-    const pa = String((c as Comment & { _postAuthor?: string })._postAuthor || '').trim()
-    if (!brand && talksAboutBrand(c.text, { rivalPage: !!pa && !brandIn(normL(pa), keys) })) c.aboutBrand = true
+    const pa = String((c as Comment & { _postAuthor?: string })._postAuthor || postAuthor || '').trim()
+    const rivalPage = !!pa && !brandIn(normL(pa), keys), brandPage = !!pa && !rivalPage
+    // en una publicación de la propia marca, hablar del servicio, los pedidos, los precios o las entregas es hablar de ella
+    if (!brand && (postAbout(c) || talksAboutBrand(c.text, { rivalPage }) || (brandPage && (COMMERCE_RE.test(t) || BIZ_RE.test(t))))) c.aboutBrand = true
     let why = ''
     if (AVOID_RE.test(t)) why = 'recomienda no comprar'
     else if (PREFER_RE.test(t) && !brand && COMMERCE_RE.test(t)) why = 'prefiere otra opción'
@@ -128,9 +144,9 @@ function applySentOverrides(list: Comment[]) {
   })
 }
 const SENT_TMP = ['sentimentFrom', 'sentimentOwn', 'brandStance', 'aboutBrand', 'sentimentManual', 'sentimentAuto'] as const
-export function rescoreSentiment(list: Comment[]) {
+export function rescoreSentiment(list: Comment[], postAuthor = '', postText = '') {
   list.forEach((c) => { const s = sentiment(c.text || ''); c.sentiment = s.label; c.sentimentScore = s.score; SENT_TMP.forEach((k) => delete c[k]) })
-  brandStance(list); applySentOverrides(list); inheritAgreement(list, new Map(list.map((c) => [c.id, c])))
+  brandStance(list, postAuthor, postText); applySentOverrides(list); inheritAgreement(list, new Map(list.map((c) => [c.id, c])))
 }
 
 /** Prepara la lista: índices, jerarquía, menciones, emojis, sentimiento y fechas. */
@@ -174,7 +190,7 @@ export function finalize(raw: RawComment[], meta: Meta): Comment[] {
     c.dateApprox = !!c.dateApprox
     c.source = c.source || 'importado'
   })
-  brandStance(list)
+  brandStance(list, meta.postAuthor || '', [meta.title, (meta as { postText?: string }).postText].filter(Boolean).join(' '))
   applySentOverrides(list)
   inheritAgreement(list, byId)
   return list

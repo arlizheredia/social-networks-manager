@@ -21,6 +21,11 @@ describe('Indicador del enfoque en el informe', () => {
     expect(row!.a).toBeLessThanOrEqual(comments.length)
     expect(reportHtml(m)).toContain(`Comentarios que hablan de ${m.focus!.name}`)
   })
+  it('muestra el enfoque completo cuando tiene más que el tema', async () => {
+    const { comments } = prepare(demoParsed())
+    const m = await buildReport({ comments, focus: 'pedido y comentarios relacionados', terms: [], author: '', client: '' })
+    expect(m.cmp.find((r) => r.k.startsWith('Comentarios que hablan de'))!.k).toBe('Comentarios que hablan de pedido (enfoque: «pedido y comentarios relacionados»)')
+  })
   it('sin enfoque no aparece', async () => {
     const m = await buildReport({ comments: prepare(demoParsed()).comments, focus: '', terms: [], author: '', client: '' })
     expect(m.cmp.some((r) => r.k.startsWith('Comentarios que hablan de'))).toBe(false)

@@ -86,7 +86,7 @@ export async function gather(tids: string[], range: Range = {}) {
         if (out.has(k)) return
         const day = dayOf(c, basis)
         if ((range.from && (!day || day < range.from)) || (range.to && (!day || day > range.to))) return
-        const item = { ...c, platform: c.platform || p?.platform, _ref: { tid: t.id, postId: pid }, _post: p ? postLabel(p) : pc.title || '', _postAuthor: pc.postAuthor || p?.author || '', _postUrl: p?.url || pc.url, _date: day }
+        const item = { ...c, platform: c.platform || p?.platform, _ref: { tid: t.id, postId: pid }, _post: p ? postLabel(p) : pc.title || '', _postTitle: [pc.title, p?.title].filter(Boolean).join(' '), _postAuthor: pc.postAuthor || p?.author || '', _postUrl: p?.url || pc.url, _date: day }
         out.set(k, item)
         plat[String(item.platform)] = (plat[String(item.platform)] || 0) + 1
       })
@@ -107,11 +107,11 @@ const sign = (n: number) => (n > 0 ? '+' + fmtN(n) : fmtN(n))
  * Indicadores. Con enfoque, «Comentarios revisados» son todos los del seguimiento y se añade
  * «Comentarios que hablan de <enfoque>» (sin contar al equipo, como en el resumen).
  */
-function compareRows(c: Snapshot, p: Snapshot | null, f?: { name: string; all: number; allPrev: number | null }): CmpRow[] {
+function compareRows(c: Snapshot, p: Snapshot | null, f?: { name: string; q?: string; all: number; allPrev: number | null }): CmpRow[] {
   const talk = (x: Snapshot) => x.list.filter((y) => !y.isTeam).length
   const rows: Omit<CmpRow, 'D' | 'tone'>[] = [
     { k: 'Comentarios revisados', a: f ? f.all : c.list.length, b: p ? (f ? f.allPrev : p.list.length) : null, good: 'up' },
-    ...(f ? [{ k: `Comentarios que hablan de ${f.name}`, a: talk(c), b: p ? talk(p) : null, good: 'up' as const }] : []),
+    ...(f ? [{ k: `Comentarios que hablan de ${f.name}${f.q && normName(f.q) !== normName(f.name.replace(/[«»]/g, '')) ? ` (enfoque: «${f.q}»)` : ''}`, a: talk(c), b: p ? talk(p) : null, good: 'up' as const }] : []),
     { k: 'Personas que comentan', a: c.authorsN, b: p ? p.authorsN : null, good: 'up' },
     { k: 'Interacciones', a: c.st.reacts, b: p ? p.st.reacts : null, good: 'up' },
     { k: 'Positivos', a: c.s.pos, b: p ? p.s.pos : null, good: 'up' },
@@ -202,7 +202,7 @@ export async function buildReport(opts: { tids?: string[]; range?: Range; commen
     title, focus, author: opts.author, client: opts.client, terms: opts.terms, generatedAt: new Date().toISOString(),
     period: opts.tids?.length ? periodOf(all.map((c) => String((c as Comment & { _date?: string })._date || '')), range) : new Date().toLocaleDateString('es', { dateStyle: 'long' }),
     tracks: tracks.map((t) => ({ id: t.id, name: t.name, date: t.date })),
-    cur, prev, prevName, cmp: compareRows(cur, prev, focus ? { name: focus.name, all: all.length, allPrev: prevAll } : undefined), teamOn,
+    cur, prev, prevName, cmp: compareRows(cur, prev, focus ? { name: focus.name, q: focus.q, all: all.length, allPrev: prevAll } : undefined), teamOn,
     pending: nonTeam.filter((c) => c.needsTeam).length, answered: nonTeam.filter((c) => c.teamAnswered).length,
     posts, evolution,
     topAuthors: cur.st.authors.filter((a) => !list.find((c) => c.authorName === a.name)?.isTeam).slice(0, 8).map((a) => ({ name: a.name, count: a.count })),

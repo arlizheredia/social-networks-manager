@@ -26,3 +26,26 @@ describe('Comentarios que hablan de la marca sin nombrarla', () => {
     expect(focusFilter(list, keys).map((c) => c.id)).toEqual(['1'])
   })
 })
+
+describe('Publicación de la propia marca', () => {
+  it('en la publicación de la marca todos sus comentarios están relacionados; en la de otra página, solo los que hablan de ella', () => {
+    const raw = () => [{ id: '1', authorName: 'Ana', text: '¡Excelente servicio! Llegó todo rapidísimo y fresco' }, { id: '2', authorName: 'Luis', text: 'Saludos para mi familia en Holguín' }]
+    const own = finalize(raw(), { platform: 'facebook', postAuthor: 'Kanasta24' }) as Comment[]
+    expect(own.map((c) => !!c.aboutBrand)).toEqual([true, true])
+    const other = finalize(raw(), { platform: 'facebook', postAuthor: 'Mi Tienda' }) as Comment[]
+    expect(other.map((c) => !!c.aboutBrand)).toEqual([false, false])
+  })
+})
+
+describe('Contexto de la publicación', () => {
+  it('si la publicación nombra la marca, sus comentarios están relacionados aunque no la mencionen', () => {
+    const raw = () => [{ id: '1', authorName: 'Odalmis Rodriguez', text: 'Downtown ya estamos así?? Que nivel pero no hay edificios como así jjjj' }]
+    const reel = finalize(raw(), { platform: 'facebook', postAuthor: 'Harry Landy Smith', title: 'Kanasta24 para todo el oriente del país #yquientedicesati' }) as Comment[]
+    expect(reel[0].aboutBrand).toBe(true)
+    const otro = finalize(raw(), { platform: 'facebook', postAuthor: 'Harry Landy Smith', title: 'Paseo por Holguín' }) as Comment[]
+    expect(!!otro[0].aboutBrand).toBe(false)
+    // desde un seguimiento: el texto de la publicación viaja con cada comentario
+    const seg = finalize([{ ...raw()[0], _postTitle: 'Kanasta24 para todo el oriente del país', _postAuthor: 'Harry Landy Smith' }], { platform: 'facebook' }) as Comment[]
+    expect(seg[0].aboutBrand).toBe(true)
+  })
+})
