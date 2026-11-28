@@ -59,7 +59,7 @@ function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void })
       </div>
       <Textarea className="font-mono text-xs" rows={8} value={text} onChange={(e) => setText(e.target.value)} placeholder={'FBP_GROUPS:[…]\nMi grupo | https://www.facebook.com/groups/123/\nhttps://www.facebook.com/groups/otro/'} />
       <div className={cn('mt-2 text-xs', a.isCheck || (text.trim() && !a.list.length) ? 'text-error' : 'text-success')}>
-        {a.isCheck ? 'Esto es una verificación, no una lista de grupos. Pégala en Historial → Verificar.'
+        {a.isCheck ? 'Esto no es una lista de grupos: usa el marcador en la página «Tus grupos» de Facebook.'
           : !text.trim() ? ' ' : !a.list.length ? 'No se ha detectado ningún grupo válido.'
             : `${a.list.length} grupo(s) detectados · ${a.nw.length} nuevos${a.fixes.length ? ` · se corregirá el nombre de ${a.fixes.length}` : ''}${a.skipped ? ` · ${a.skipped} ya existen (se omitirán)` : ''}`}
       </div>
@@ -108,7 +108,7 @@ function TagFilter({ tags, value, onChange }: { tags: string[]; value: Set<strin
   const label = !value.size ? 'Etiquetas' : value.size === 1 ? [...value][0] : `${value.size} etiquetas`
   return (
     <Popover trigger={(o) => <Chip icon="sell" selected={value.size > 0} onClick={o}>{label} ▾</Chip>}>
-      {() => <div className="min-w-56">
+      {() => <div className="min-w-[min(100%,14rem)]">
         <div className="mb-1 flex items-center justify-between px-3 pt-1 text-xs text-text-2"><span>Mostrar grupos con</span>{value.size > 0 && <button className="font-medium text-primary" onClick={() => onChange(new Set())}>Todas</button>}</div>
         {opts.map((t) => (
           <label key={t} className="flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2 hover:bg-text/8">
@@ -227,7 +227,7 @@ export default function GroupsPage() {
 
       <Card filled className="mb-4">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="min-w-64 flex-1">
+          <div className="min-w-[min(100%,16rem)] flex-1">
             <h2 className="text-lg">Captura tus grupos desde Facebook con un clic</h2>
             <p className="text-text-2">Arrastra el botón azul a tu barra de marcadores. Luego abre <a href="https://www.facebook.com/groups/joins/" target="_blank" rel="noopener">Tus grupos</a> en Facebook, desplázate hasta el final y pulsa el marcador. Después vuelve aquí y usa <b className="font-medium">Importar → Pegar</b>.</p>
           </div>

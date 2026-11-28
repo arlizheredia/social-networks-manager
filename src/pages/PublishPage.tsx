@@ -107,7 +107,7 @@ export default function PublishPage() {
           <Card>
             <CardHead step={1} title="Publicación de origen" sub="La publicación de Facebook que quieres difundir (opcional si solo publicas contenido nuevo)" />
             <div className="flex flex-wrap gap-2">
-              <div className="min-w-60 flex-[2]">
+              <div className="min-w-[min(100%,15rem)] flex-[2]">
                 <Input
                   icon="link" type="url" inputMode="url" placeholder="https://www.facebook.com/…/posts/…" value={draft.url} aria-label="URL de la publicación"
                   onChange={(e) => setPub((s) => ({ draft: { ...s.draft, url: e.target.value } }))}
@@ -119,7 +119,7 @@ export default function PublishPage() {
                   </>}
                 />
               </div>
-              <div className="min-w-40 flex-1"><Input placeholder="Nombre (recomendado)" maxLength={120} value={draft.name} aria-label="Nombre de la publicación"
+              <div className="min-w-[min(100%,10rem)] flex-1"><Input placeholder="Nombre (recomendado)" maxLength={120} value={draft.name} aria-label="Nombre de la publicación"
                 onChange={(e) => setPub((s) => ({ draft: { ...s.draft, name: e.target.value } }))} /></div>
             </div>
             <div className={`mt-1.5 text-xs ${r.error ? 'text-error' : r.url ? 'text-success' : 'text-text-2'}`}>
@@ -144,8 +144,8 @@ export default function PublishPage() {
               {n > 0 && !hasContent && <div className="text-xs text-error">Añade una URL, texto o archivos para empezar</div>}
               {n > 0 && hasContent && r.error && <div className="text-xs text-error">Revisa la URL de origen</div>}
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-text-2">
-                <label className="inline-flex items-center gap-1">Pausa
-                  <Select className="!h-8 !w-auto !py-0 text-xs" value={st.pause} onChange={(e) => { updateSettings({ pause: clamp(e.target.value, SAFE.MIN_PAUSE, SAFE.MAX_PAUSE, 30) }); toast(`Pausa entre grupos: ${paceLabel(+e.target.value)}`) }}>
+                <label className="inline-flex max-w-full items-center gap-1">Pausa
+                  <Select className="!h-8 !w-auto min-w-0 !py-0 text-xs" value={st.pause} onChange={(e) => { updateSettings({ pause: clamp(e.target.value, SAFE.MIN_PAUSE, SAFE.MAX_PAUSE, 30) }); toast(`Pausa entre grupos: ${paceLabel(+e.target.value)}`) }}>
                     {[...new Set([...PACES, st.pause])].sort((a, b) => a - b).map((v) => <option key={v} value={v}>{paceLabel(v)}{v === SAFE.MIN_PAUSE ? ' (mínimo)' : ''}</option>)}
                   </Select>
                 </label>

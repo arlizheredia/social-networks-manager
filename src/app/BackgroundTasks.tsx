@@ -44,7 +44,7 @@ function Interrupted({ icon, title, sub, pct, onContinue, onDismiss }: { icon: s
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1 text-sm font-medium"><Icon name={icon} className="!text-[16px] text-warn" /><span className="truncate">{title}</span></span>
         <span className="block truncate text-xs text-text-2">{sub}</span>
-        <span className="mt-1 flex gap-1">
+        <span className="mt-1 flex flex-wrap gap-1">
           <button onClick={onContinue} className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-on-primary">Continuar</button>
           <button onClick={onDismiss} className="rounded-full px-3 py-1 text-xs font-medium text-text-2 hover:bg-text/8">Más tarde</button>
         </span>

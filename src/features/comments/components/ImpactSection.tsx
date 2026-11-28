@@ -49,7 +49,7 @@ export function ImpactSection({ list, sent, onPerson }: { list: Comment[]; sent:
           </p>
         </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <ol className="space-y-3">
           {groups.map((g, i) => (
             <li key={g.rep.id} className="rounded-2xl border-l-4 bg-surface-2 p-3" style={{ borderColor: pos ? 'var(--viz-pos)' : 'var(--viz-neg)' }}>

@@ -99,8 +99,8 @@ function PostsCard({ onTrack }: { onTrack: (ids: string[]) => void }) {
       <CardHead step={1} title="Publicaciones" sub="Las publicaciones de Facebook, Instagram o TikTok que revisas cada día" />
       {many == null ? (
         <div className="flex flex-wrap gap-2">
-          <div className="min-w-60 flex-[2]"><Input icon="link" placeholder="Pega el enlace de una publicación" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={async (e) => { if (e.key === 'Enter' && url.trim()) { if (await addPosts([url], name)) { setUrl(''); setName('') } } }} /></div>
-          <div className="min-w-40 flex-1"><Input placeholder="Nombre (recomendado)" maxLength={120} value={name} onChange={(e) => setName(e.target.value)} /></div>
+          <div className="min-w-[min(100%,15rem)] flex-[2]"><Input icon="link" placeholder="Pega el enlace de una publicación" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={async (e) => { if (e.key === 'Enter' && url.trim()) { if (await addPosts([url], name)) { setUrl(''); setName('') } } }} /></div>
+          <div className="min-w-[min(100%,10rem)] flex-1"><Input placeholder="Nombre (recomendado)" maxLength={120} value={name} onChange={(e) => setName(e.target.value)} /></div>
           <Button icon="add" disabled={!url.trim()} onClick={async () => { if (await addPosts([url], name)) { setUrl(''); setName('') } }}>Añadir</Button>
           <Button variant="text" onClick={() => setMany('')}>Añadir varias</Button>
           <Popover trigger={(o) => <IconButton icon="import_export" label="Importar / exportar publicaciones" className="self-center" onClick={o} />}>
@@ -127,7 +127,7 @@ function PostsCard({ onTrack }: { onTrack: (ids: string[]) => void }) {
         <>
           <div className="mt-4 mb-2 flex flex-wrap items-center gap-2">
             <input type="checkbox" aria-label="Seleccionar todas" className="ml-[13px] size-4 shrink-0 accent-[var(--primary)]" checked={list.length > 0 && list.every((p) => sel.has(p.id))} onChange={(e) => setSel(e.target.checked ? new Set(list.map((p) => p.id)) : new Set())} />
-            <div className="min-w-40 flex-1"><Input icon="search" className="!h-10" placeholder="Buscar publicación" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+            <div className="min-w-[min(100%,10rem)] flex-1"><Input icon="search" className="!h-10" placeholder="Buscar publicación" value={q} onChange={(e) => setQ(e.target.value)} /></div>
             {ids.length > 0 && <>
               <Button size="sm" variant="text" className="!text-error" onClick={async () => { if (await confirmBox('¿Eliminar publicaciones?', `Se quitarán ${ids.length} de la lista. Los comentarios ya guardados se conservan en los seguimientos.`, 'Eliminar', true)) { await collapseRows(ids); await deletePosts(ids); setSel(new Set()) } }}>Eliminar</Button>
               <Button size="sm" icon="track_changes" onClick={() => onTrack(ids)}>Crear seguimiento ({ids.length})</Button>

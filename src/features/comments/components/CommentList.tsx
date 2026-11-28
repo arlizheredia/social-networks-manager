@@ -129,7 +129,7 @@ export function CommentList() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-64 flex-1">
+        <div className="relative min-w-[min(100%,16rem)] flex-1">
           <Icon name="auto_awesome" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 !text-[20px] text-text-2" />
           <input className="h-12 w-full rounded-full border border-outline bg-surface pr-4 pl-10 focus:border-primary focus:outline-2 focus:outline-primary" placeholder={placeholder} value={s.q}
             onChange={(e) => useExplore.setState({ q: e.target.value })}
@@ -165,7 +165,7 @@ export function CommentList() {
       )}
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-outline-2 bg-surface px-4 py-2">
         <Icon name="support_agent" className="text-primary" />
-        <div className="min-w-40 flex-1 text-sm">
+        <div className="min-w-[min(100%,10rem)] flex-1 text-sm">
           <b className="font-medium">Asistente de respuestas</b>{' '}
           <span className="text-text-2">{s.teamOn ? `· ${pending.length} ${pending.length === 1 ? 'comentario requiere' : 'comentarios requieren'} respuesta` : '· define tu equipo para saber qué falta responder'}</span>
           {s.teamOn && s.focus && <div className="text-xs text-text-2">Los que tratan de «{focusName(s.focus.q)}» y nadie del equipo ha respondido{s.focus.ai ? '' : ' (por palabras clave; con la IA instalada también por significado)'}. El enfoque se cambia en Ajustes › Comentarios.</div>}

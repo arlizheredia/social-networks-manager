@@ -22,7 +22,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 function Row({ title, sub, children }: { title: ReactNode; sub?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-outline-2 py-3 last:border-0">
-      <div className="min-w-48 flex-1"><div className="text-text">{title}</div>{sub && <div className="text-xs text-text-2">{sub}</div>}</div>
+      <div className="min-w-[min(100%,12rem)] flex-1"><div className="text-text">{title}</div>{sub && <div className="text-xs text-text-2">{sub}</div>}</div>
       <div className="flex items-center gap-2">{children}</div>
     </div>
   )

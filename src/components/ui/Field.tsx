@@ -79,12 +79,12 @@ export function Chip({ selected, onClick, children, icon }: { selected?: boolean
       aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium whitespace-nowrap transition-colors [&_.ms]:text-[18px]',
+        'inline-flex h-8 max-w-full shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium whitespace-nowrap transition-colors [&_.ms]:text-[18px]',
         selected ? 'border-transparent bg-secondary-container text-on-secondary-container' : 'border-outline-2 text-text-2 hover:bg-text/8',
       )}
     >
       {selected ? <Icon name="check" /> : icon && <Icon name={icon} />}
-      {children}
+      {typeof children === 'string' ? <span className="min-w-0 truncate">{children}</span> : children}
     </button>
   )
 }

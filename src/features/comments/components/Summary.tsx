@@ -83,7 +83,7 @@ export function Summary({ list, platform, onSearch }: { list: Comment[]; platfor
         </ChartCard>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartCard table={{ head: ['Sentimiento', 'Comentarios', '%'], rows: [['Positivos', st.pos, `${pct(st.pos, T)} %`], ['Neutrales', st.neu, `${pct(st.neu, T)} %`], ['Negativos', st.neg, `${pct(st.neg, T)} %`]] }} title="Sentimiento estimado" sub="Orientativo: se estima con un diccionario de palabras y emojis. Puedes corregir cada comentario.">
           <SegmentedBar parts={[
             { label: 'Positivos', value: st.pos, color: 'var(--viz-pos)', ink: 'var(--viz-on-fill)' },
@@ -114,7 +114,7 @@ export function Summary({ list, platform, onSearch }: { list: Comment[]; platfor
       <ImpactSection list={list} sent="negativo" onPerson={(n) => onSearch('@' + n)} />
 
       {(hasHours || act.byWeekday.some(Boolean)) && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {hasHours && (
             <ChartCard table={{ head: ['Hora', 'Comentarios'], rows: act.byHour.map((n, h) => [`${h}:00`, n]) }} title="Actividad por hora del día" sub={(() => { const h = act.byHour.indexOf(Math.max(...act.byHour)); return `Hora con más comentarios: ${h}:00 – ${h + 1}:00.` })()}>
               <ColumnChart data={act.byHour.map((n, h) => ({ label: `${h} h`, value: n }))} valueLabel="comentarios" height={180} />
@@ -128,7 +128,7 @@ export function Summary({ list, platform, onSearch }: { list: Comment[]; platfor
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {act.buckets.length > 1 && (
           <ChartCard title="Autores más activos" sub="Pulsa un nombre para ver sus comentarios.">
             <RankBars unit="comentarios" rows={st.authors.slice(0, 8).map((a) => ({ key: a.name, label: a.name, value: a.count }))} onClick={(k) => onSearch('@' + k)} />
@@ -148,7 +148,7 @@ export function Summary({ list, platform, onSearch }: { list: Comment[]; platfor
       {(st.emojis.length > 0 || st.hashtags.length > 0 || st.mentions.length > 0) && (
         <Card>
           {st.emojis.length > 0 && <><h3 className="mb-2 text-base">Emojis más usados</h3><div className="mb-4 flex flex-wrap gap-3 text-xl">{st.emojis.slice(0, 14).map(([e, n]) => <span key={e} title={`${n} veces`}>{e}<sub className="ml-0.5 text-xs text-text-2">{n}</sub></span>)}</div></>}
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {st.hashtags.length > 0 && <div><h3 className="mb-2 text-base">Hashtags</h3><div className="flex flex-wrap gap-1.5">{st.hashtags.map(([w, n]) => <span key={w} className="rounded-md bg-surface-2 px-2 py-0.5 text-sm">{w} <b className="font-medium text-text-2">{n}</b></span>)}</div></div>}
             {st.mentions.length > 0 && <div><h3 className="mb-2 text-base">Menciones</h3><div className="flex flex-wrap gap-1.5">{st.mentions.map(([w, n]) => <span key={w} className="rounded-md bg-surface-2 px-2 py-0.5 text-sm">@{w} <b className="font-medium text-text-2">{n}</b></span>)}</div></div>}
           </div>

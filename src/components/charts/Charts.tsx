@@ -24,7 +24,7 @@ function useWidth<T extends HTMLElement>() {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const ro = new ResizeObserver(([e]) => setW(Math.max(240, Math.round(e.contentRect.width))))
+    const ro = new ResizeObserver(([e]) => setW(Math.max(120, Math.round(e.contentRect.width))))
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -36,7 +36,7 @@ interface Tip { x: number; y: number; title: string; rows: { key?: string; color
 function TooltipBox({ tip }: { tip: Tip | null }) {
   if (!tip) return null
   return (
-    <div role="status" className="pointer-events-none absolute z-10 min-w-36 -translate-x-1/2 -translate-y-full rounded-xl bg-surface-3 px-3 py-2 text-xs shadow-2" style={{ left: tip.x, top: tip.y - 10 }}>
+    <div role="status" className="pointer-events-none absolute z-10 min-w-[min(100%,9rem)] -translate-x-1/2 -translate-y-full rounded-xl bg-surface-3 px-3 py-2 text-xs shadow-2" style={{ left: tip.x, top: tip.y - 10 }}>
       <div className="mb-1 font-medium text-text-2">{tip.title}</div>
       {tip.rows.map((r, i) => (
         <div key={i} className="flex items-center gap-2">
@@ -82,9 +82,9 @@ export function DataTable({ head, rows, inline }: { head: string[]; rows: (strin
 /** Conmutador único de la app para ver un gráfico como gráfico o como tabla. */
 export function ViewToggle({ table, onChange }: { table: boolean; onChange: (table: boolean) => void }) {
   const opt = (on: boolean, icon: string, label: string, v: boolean) => (
-    <button type="button" role="radio" aria-checked={on} onClick={() => onChange(v)}
+    <button type="button" role="radio" aria-checked={on} aria-label={label} title={label} onClick={() => onChange(v)}
       className={cn('inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors', on ? 'bg-secondary-container text-on-secondary-container' : 'text-text-2 hover:bg-text/8')}>
-      <Icon name={icon} className="!text-[16px]" />{label}
+      <Icon name={icon} className="!text-[16px]" /><span className="hidden min-[400px]:inline">{label}</span>
     </button>
   )
   return (
@@ -123,7 +123,7 @@ export function ColumnChart({ data, height = 200, lineLabel, valueLabel, onSelec
   const path = data.some((d) => d.line != null) ? data.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d.line ?? 0).toFixed(1)}`).join(' ') : ''
   return (
     <div ref={ref} className="relative" onMouseLeave={() => { setTip(null); setHover(-1) }}>
-      <svg width={w} height={height} role="img" aria-label={`${valueLabel}: ${data.length} periodos`} className="block overflow-visible">
+      <svg width={w} height={height} role="img" aria-label={`${valueLabel}: ${data.length} periodos`} className="block max-w-full overflow-visible">
         {ticks(max).map((t) => (
           <g key={t}>
             <line x1={padL} x2={w - padR} y1={y(t)} y2={y(t)} stroke={t ? 'var(--viz-grid)' : 'var(--viz-axis)'} strokeWidth={1} />
@@ -172,7 +172,7 @@ export function DivergingChart({ data, height = 180 }: { data: Div[]; height?: n
   }
   return (
     <div ref={ref} className="relative" onMouseLeave={() => setTip(null)}>
-      <svg width={w} height={height} role="img" aria-label="Comentarios positivos y negativos por periodo" className="block overflow-visible">
+      <svg width={w} height={height} role="img" aria-label="Comentarios positivos y negativos por periodo" className="block max-w-full overflow-visible">
         {[max, 0, max].map((t, k) => {
           const yy = k === 0 ? padT : k === 1 ? mid : padT + ih
           return (

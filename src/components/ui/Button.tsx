@@ -33,7 +33,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-full font-medium whitespace-nowrap transition-[background,box-shadow,transform] duration-150 active:scale-[.97] disabled:cursor-not-allowed disabled:active:scale-100',
+        'inline-flex max-w-full shrink-0 items-center justify-center rounded-full font-medium whitespace-nowrap transition-[background,box-shadow,transform] duration-150 active:scale-[.97] disabled:cursor-not-allowed disabled:active:scale-100',
         variants[variant],
         sizes[size],
         className,
@@ -41,7 +41,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...rest}
     >
       {icon && <Icon name={icon} />}
-      {children}
+      {/* en pantallas muy estrechas el texto largo se recorta con «…» en lugar de desbordar */}
+      {typeof children === 'string' ? <span className="min-w-0 truncate">{children}</span> : children}
     </button>
   )
 })

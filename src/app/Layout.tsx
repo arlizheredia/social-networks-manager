@@ -12,23 +12,26 @@ import { RunDialog } from '@/features/publisher/components/RunDialog'
 import { BackgroundTasks } from './BackgroundTasks'
 import { TrackWindow } from '@/features/comments/components/Tracking'
 import { CompWindow } from '@/features/competition/CompWindow'
+import { useAnalysisScheduler } from '@/features/competition/runAnalysis'
 
 const THEME_ICON = { system: 'brightness_auto', light: 'light_mode', dark: 'dark_mode' } as const
 const THEME_LABEL = { system: 'Tema del sistema', light: 'Tema claro', dark: 'Tema oscuro' } as const
 
 function Brand() {
   return (
-    <NavLink to="/" className="flex items-center gap-3 text-text no-underline" aria-label="Social Networks Manager — inicio">
+    <NavLink to="/" className="flex min-w-0 items-center gap-3 text-text no-underline" aria-label="Social Networks Manager — inicio">
       <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="size-9 shrink-0" />
       <span className="font-display text-[20px] leading-6 text-text-2">
         <span className="hidden sm:inline">Social Networks </span>
-        <b className="font-medium text-text">Manager</b>
+        <b className="hidden font-medium text-text min-[360px]:inline">Manager</b>
       </span>
     </NavLink>
   )
 }
 
 export function Layout() {
+  // análisis de competencia que se actualizan solos según su periodicidad
+  useAnalysisScheduler()
   const { theme, cycleTheme } = useSettings()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [online, setOnline] = useState(navigator.onLine)
@@ -43,7 +46,7 @@ export function Layout() {
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 flex h-16 items-center gap-2 bg-bg/95 px-3 backdrop-blur sm:px-4 md:pl-[26px]">
+      <header className="sticky top-0 z-30 flex h-16 items-center gap-1 bg-bg/95 px-2 backdrop-blur min-[360px]:gap-2 min-[360px]:px-3 sm:px-4 md:pl-[26px]">
         <Brand />
         <div className="flex-1" />
         <SessionsChip />
@@ -69,7 +72,7 @@ export function Layout() {
           ))}
         </nav>
 
-        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-4 pt-2 pb-28 sm:px-6 md:pb-4 lg:pr-8">
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-3 pt-2 pb-28 min-[400px]:px-4 sm:px-6 md:pb-4 lg:pr-8">
           {/* un solo ancho máximo para todas las secciones: más amplio que antes, sin estirarse en pantallas muy grandes */}
           <div className="mx-auto max-w-[1440px]">
             {!online && (

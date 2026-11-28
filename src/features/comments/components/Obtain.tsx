@@ -14,7 +14,7 @@ export function Obtain() {
     try { setErr(''); loadParsed(parseAny(raw)) } catch (e) { setErr((e as Error).message) }
   }
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <Card>
         <CardHead step={1} title="Extrae con el marcador" sub="Para una publicación puntual de Facebook, Instagram o TikTok (para varias cada día, usa Seguimiento)" />
         <ol className="mb-4 list-decimal space-y-1.5 pl-5 text-text-2">

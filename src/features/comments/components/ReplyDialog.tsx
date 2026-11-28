@@ -95,7 +95,7 @@ export function ReplyDialog({ queue, start, onClose }: { queue: Comment[]; start
           <div className="whitespace-pre-wrap">{done[c.id].text}</div>
         </div>
       )}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <div className="mb-2 flex items-center gap-2"><h3 className="flex-1 text-base">Respuestas</h3>
           </div>

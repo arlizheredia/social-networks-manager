@@ -15,7 +15,7 @@ export default function HelpPage() {
     <div>
       <PageHead title="Centro de Ayuda" sub="Guías y respuestas para sacar partido a la app." />
       <div className="mb-6 max-w-xl"><Input icon="search" placeholder="Buscar en la ayuda" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <nav className="hidden self-start lg:sticky lg:top-20 lg:block" aria-label="Índice">
           {HELP_CATS.map((c) => { const it = list.filter((a) => a.cat === c); return it.length ? (
             <div key={c} className="mb-3"><div className="mb-1 px-3 text-xs font-medium text-text-2">{c}</div>
@@ -26,7 +26,7 @@ export default function HelpPage() {
         <div className="space-y-4">
           {q && <p className="text-sm text-text-2">{list.length} artículo{list.length === 1 ? '' : 's'} para «{q}»</p>}
           {list.length ? list.map((a) => (
-            <article key={a.id} id={'help-' + a.id} className={cn('scroll-mt-20 rounded-3xl border bg-surface p-6', article === a.id ? 'border-primary' : 'border-outline-2')}>
+            <article key={a.id} id={'help-' + a.id} className={cn('scroll-mt-20 rounded-3xl border bg-surface p-4 break-words min-[400px]:p-5 sm:p-6', article === a.id ? 'border-primary' : 'border-outline-2')}>
               <h2 className="mb-3 flex items-center gap-2 text-xl"><Icon name={a.icon} className="text-primary" />{a.title}</h2>
               <div className="help-body text-text-2" dangerouslySetInnerHTML={{ __html: a.body }} />
             </article>

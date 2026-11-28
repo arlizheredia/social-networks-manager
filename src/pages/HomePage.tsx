@@ -323,7 +323,7 @@ export default function HomePage() {
                 <div className="mb-1 text-xs text-text-2">Grupos por día (14 días)</div>
                 <ColumnChart data={cols} height={110} valueLabel="grupos en que se compartió" />
               </>
-            ) : <div className="flex items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2 text-sm text-text-2"><Icon name="campaign" className="text-primary" /><span className="flex-1">Nada compartido en dos semanas.</span><Link to="/publicar"><Button size="sm" variant="tonal">Publicar</Button></Link></div>}
+            ) : <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-surface-2 px-3 py-2 text-sm text-text-2"><Icon name="campaign" className="text-primary" /><span className="min-w-0 flex-1">Nada compartido en dos semanas.</span><Link to="/publicar"><Button size="sm" variant="tonal">Publicar</Button></Link></div>}
           </Card>
           <Card className={C}>
             <CardHead title="Competencia" sub={lastComp ? `Último informe ${ago(lastComp.createdAt)} · ${fmtNum(compHist.list.length)} en total` : 'Aún no hay informes de la competencia'} />

@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn'
 
 export function Card({ className, children, filled }: { className?: string; children: ReactNode; filled?: boolean }) {
   return (
-    <div className={cn('rounded-3xl p-5 sm:p-6', filled ? 'bg-surface-2' : 'border border-outline-2 bg-surface', className)}>
+    <div className={cn('rounded-3xl p-4 min-[400px]:p-5 sm:p-6', filled ? 'bg-surface-2' : 'border border-outline-2 bg-surface', className)}>
       {children}
     </div>
   )
@@ -11,15 +11,18 @@ export function Card({ className, children, filled }: { className?: string; chil
 
 export function CardHead({ step, title, sub, actions }: { step?: number | string; title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="mb-4 flex items-start gap-3">
-      {step !== undefined && (
-        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary-container text-[13px] font-medium text-on-primary-container">{step}</span>
-      )}
-      <div className="min-w-0 flex-1">
-        <h2 className="text-lg leading-7 text-text">{title}</h2>
-        {sub && <div className="text-[13px] text-text-2">{sub}</div>}
+    // si no hay sitio, los botones pasan arriba a la derecha y el texto ocupa todo el ancho debajo
+    <div className="mb-4 flex flex-wrap-reverse items-end gap-x-3 gap-y-2">
+      <div className="flex min-w-[min(100%,26rem)] flex-1 items-start gap-3">
+        {step !== undefined && (
+          <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary-container text-[13px] font-medium text-on-primary-container">{step}</span>
+        )}
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg leading-7 text-text">{title}</h2>
+          {sub && <div className="text-[13px] text-text-2">{sub}</div>}
+        </div>
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
+      {actions && <div className="ml-auto flex shrink-0 items-center gap-1">{actions}</div>}
     </div>
   )
 }
@@ -31,7 +34,7 @@ export function PageHead({ title, sub, actions }: { title: string; sub?: ReactNo
         <h1 className="text-[28px] leading-9 text-text">{title}</h1>
         {sub && <p className="mt-1 text-text-2">{sub}</p>}
       </div>
-      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
+      {actions && <div className="flex max-w-full flex-wrap gap-2">{actions}</div>}
     </div>
   )
 }

@@ -61,8 +61,8 @@ function GoalRow({ g, byDay }: { g: Goal; byDay: Map<string, DayAct> }) {
       <div className="mt-0.5 flex flex-wrap gap-x-3 pl-[26px] text-xs text-text-2">
         <span>{g.rule}</span><span>Última: <b className="font-medium text-text">{last}</b></span><span>Próxima: <b className="font-medium text-text">{next}</b></span>
       </div>
-      <div className="mt-1.5 flex items-center gap-3 pl-[26px]">
-        <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--heat-0)]" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Cumplimiento de ${g.label}`}>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 pl-[26px]">
+        <div className="h-1.5 min-w-[min(100%,6rem)] flex-1 overflow-hidden rounded-full bg-[var(--heat-0)]" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Cumplimiento de ${g.label}`}>
           <div className="anim-fill h-full rounded-full bg-[var(--viz-1)]" style={{ width: `${pct}%` }} />
         </div>
         <span className="shrink-0 text-xs text-text-2 tabular-nums">{st.unit === 'meses' ? `${st.done} de ${st.of} meses` : `${st.done} de ${st.of} días (${pct} %)`}</span>
