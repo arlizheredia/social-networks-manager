@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, FloatingWindow, Icon, IconButton, toast } from '@/components/ui'
+import { Button, FloatingWindow, Icon, IconButton, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText, download } from '@/lib/util'
 import { beep } from '@/lib/timers'
 import { initials, parseFbUrl } from '../fb'
 import { useMedia, copyImage } from '../media'
 import { usePublisher } from '../store'
+import { deleteGroups } from '../groups'
 import { cleanErr, entryTitle, failedItems, gate, hhmm, reasonOf } from '../logic'
 import { clearForm, closeRun, confirmTestOk, setRunBg, showRun, continueAuto, jumpTo, mark, panicStop, retryFailed, retryNow, runText, stepOpen, stopAfterCurrent, useRun, type RunState } from '../run'
 import type { HistoryEntry } from '../types'
@@ -184,6 +185,9 @@ function Summary({ e }: { e: HistoryEntry }) {
   const d = e.items.filter((i) => i.status === 'done').length - aw
   const s = e.items.filter((i) => i.status === 'skipped').length
   const F = failedItems(e)
+  // grupos que no permiten publicar: se ofrece quitarlos de la lista
+  const groups = usePublisher((x) => x.groups)
+  const noPost = [...new Set(F.filter((i) => reasonOf(i.error) === 'el grupo no permite publicar').map((i) => i.gid))].filter((gid) => groups.some((g) => g.id === gid))
   const same = !!(draft.text || draft.url) && draft.text === e.text && (parseFbUrl(draft.url).url || '') === e.url
   useEffect(() => { if (same && st.clearAfter === 'always') clearForm() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { document.title = 'Social Networks Manager' }, [])
@@ -194,12 +198,17 @@ function Summary({ e }: { e: HistoryEntry }) {
       <p className="text-text-2">{F.length ? `Se publicó en ${d + aw} de ${e.items.length} grupos. No se pudo publicar en:` : 'Todo queda registrado en el Historial.'}</p>
       {!!F.length && <div className="w-full max-w-lg space-y-2 text-left">{F.map((i) => <div key={i.gid} className="rounded-xl bg-error-container p-2 text-sm text-error"><b>{i.name}</b> — {reasonOf(i.error)}{reasonOf(i.error) === 'incidencia técnica al publicar' && cleanErr(i.error) ? ` · ${cleanErr(i.error)}` : ''}</div>)}</div>}
       <div className="my-2 flex gap-6">
-        <div><div className="text-xs text-text-2">Publicados</div><div className="font-display text-3xl text-success">{d}</div></div>
-        {!!aw && <div><div className="text-xs text-text-2">En aprobación</div><div className="font-display text-3xl text-primary">{aw}</div></div>}
+        <div><div className="text-xs text-text-2">Compartidos</div><div className="font-display text-3xl text-success">{d + aw}</div>{!!aw && <div className="text-xs text-text-2">{aw} en aprobación</div>}</div>
         <div><div className="text-xs text-text-2">Omitidos</div><div className="font-display text-3xl">{s}</div></div>
       </div>
       <div className="flex flex-wrap justify-center gap-2">
         {!!F.length && <Button icon="refresh" onClick={async () => { await closeRun(true); retryFailed(e.id) }}>Reintentar {F.length === 1 ? 'el fallido' : `los ${F.length} fallidos`}</Button>}
+        {noPost.length > 0 && <Button variant="outlined" icon="group_remove" className="!text-error" onClick={async () => {
+          const names = groups.filter((g) => noPost.includes(g.id)).map((g) => `«${g.name}»`).join(', ')
+          if (!(await confirmBox(noPost.length === 1 ? '¿Eliminar el grupo que no permite publicar?' : `¿Eliminar los ${noPost.length} grupos que no permiten publicar?`, `${names} se quitará${noPost.length === 1 ? '' : 'n'} de tu lista de grupos (no de Facebook). El historial se conserva.`, 'Eliminar', true))) return
+          const undo = deleteGroups(noPost)
+          toast(noPost.length === 1 ? 'Grupo eliminado de tu lista' : `${noPost.length} grupos eliminados de tu lista`, 'group_remove', { label: 'Deshacer', onClick: undo })
+        }}>Eliminar {noPost.length === 1 ? 'el grupo que no permite publicar' : `los ${noPost.length} grupos que no permiten publicar`}</Button>}
         <Button variant="outlined" icon="history" onClick={async () => { await closeRun(true); nav('/historial') }}>Ver historial</Button>
         <Button variant={F.length ? 'text' : 'filled'} onClick={() => closeRun(true)}>Cerrar</Button>
       </div>

@@ -404,7 +404,9 @@ export async function runAuto(id = S().front ?? '') {
         set({ stop: true, testDone: true, stopMsg: 'Mira la ventana de Facebook: el texto, las imágenes y el enlace deberían estar listos en el cuadro de publicación, sin publicar. Ciérralo sin publicar y, si todo estaba bien, pulsa «Todo bien: publicar de verdad».' })
         break
       }
-      if (res.ok) mark('done', (res.review as Review) || undefined, undefined, me)
+      // pendiente de aprobación de los administradores = compartido (aunque Facebook lo presente como aviso o error)
+      const pendingApproval = !res.ok && !res.blocked && [err, ...msgs].some((m) => RX_PEND.test(m)) && !/no puedes publicar|you can'?t post|no eres miembro|not a member/i.test(err)
+      if (res.ok || pendingApproval) mark('done', pendingApproval ? 'awaiting' : (res.review as Review) || undefined, undefined, me)
       else if (res.blocked) {
         setLock(Date.now() + SAFE.LOCK_H * 3600e3, `«${err.slice(0, 300)}» (en ${it.name})`)
         mutateHistory((hs) => { hs.find((h) => h.id === me)!.items[idx].error = err.slice(0, 200) })
