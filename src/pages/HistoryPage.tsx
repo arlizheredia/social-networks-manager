@@ -152,7 +152,7 @@ export default function HistoryPage() {
   return (
     <div>
       <PageHead title="Historial" sub="Todo lo publicado en tus grupos, los seguimientos de comentarios y los informes de competencia." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pub', label: 'Publicaciones en grupos', short: 'Publicaciones', icon: 'send', badge: pend || undefined }, { id: 'seg', label: 'Seguimientos de comentarios', short: 'Seguimientos', icon: 'track_changes' }, { id: 'comp', label: 'Competencia', icon: 'radar' }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pub', label: 'Difusión en grupos', short: 'Difusión', icon: 'send', badge: pend || undefined }, { id: 'seg', label: 'Análisis de comentarios', short: 'Comentarios', icon: 'forum' }, { id: 'comp', label: 'Análisis de la competencia', short: 'Competencia', icon: 'radar' }]} />
       <div key={tab} className="anim-page">{tab === 'pub' ? <PublishHistory /> : tab === 'seg' ? <TrackingHistory /> : <CompHistoryTab />}</div>
     </div>
   )

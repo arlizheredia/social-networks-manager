@@ -440,7 +440,7 @@ function notifyDesk(title: string, body: string, link?: string) {
   } catch { /* */ }
 }
 
-/** Enlace a un seguimiento en Historial › Seguimientos de comentarios. */
+/** Enlace a un seguimiento en Historial › Análisis de comentarios. */
 export const historyLink = (tid: string) => `#/historial?tab=seg&t=${encodeURIComponent(tid)}`
 
 export async function runTracking(tid: string) {
