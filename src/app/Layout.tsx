@@ -72,7 +72,7 @@ export function Layout() {
           ))}
         </nav>
 
-        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-3 pt-2 pb-28 min-[400px]:px-4 sm:px-6 md:pb-4 lg:pr-8">
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 px-3 pt-2 pb-24 min-[400px]:px-4 min-[480px]:pb-28 sm:px-6 md:pb-4 lg:pr-8">
           {/* un solo ancho máximo para todas las secciones: más amplio que antes, sin estirarse en pantallas muy grandes */}
           <div className="mx-auto max-w-[1440px]">
             {!online && (
@@ -90,13 +90,14 @@ export function Layout() {
 
       <nav aria-label="Navegación" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-outline-2 bg-surface-2 md:hidden">
         {NAV.filter((n) => n.to !== '/ayuda').map((n) => (
-          <NavLink key={n.to} to={n.to} end={n.to === '/'} className="flex min-w-0 flex-1 flex-col items-center gap-1 py-2 text-[11px] font-medium text-text-2 no-underline" title={n.label}>
+          <NavLink key={n.to} to={n.to} end={n.to === '/'} aria-label={n.label} className="flex min-w-0 flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium text-text-2 no-underline min-[480px]:py-2" title={n.label}>
             {({ isActive }) => (
               <>
                 <span className={cn('grid h-8 w-11 max-w-full place-items-center rounded-full', isActive && 'bg-secondary-container text-on-secondary-container')}>
                   <Icon name={n.icon} fill={isActive} />
                 </span>
-                <span className="max-w-full truncate px-0.5">{n.short ?? n.label}</span>
+                {/* en pantallas estrechas, solo iconos (el nombre queda como etiqueta accesible y al pasar el ratón) */}
+                <span className="hidden max-w-full truncate px-0.5 min-[480px]:block">{n.short ?? n.label}</span>
               </>
             )}
           </NavLink>

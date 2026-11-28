@@ -266,17 +266,19 @@ export function CompetitorsTab({ brand }: { brand: string }) {
           <CardHead title={`Encontrados en Internet · por confirmar (${pending.length})`} sub="La búsqueda en Google los señala como posibles competidores. Confírmalos para incluirlos en el ranking o descártalos (no volverán a aparecer)." />
           <div className="divide-y divide-outline-2 overflow-hidden rounded-2xl border border-outline-2 bg-surface">
             {pending.map((c) => (
-              <div key={c.id} data-row-id={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name="public" className="!text-[20px]" /></span>
+              <div key={c.id} data-row-id={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3 min-[400px]:px-4">
+                <span className="hidden size-9 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container min-[360px]:grid"><Icon name="public" className="!text-[20px]" /></span>
                 <div className="min-w-[min(100%,12rem)] flex-1">
-                  <div className="font-medium">{c.name} <a href={c.url} target="_blank" rel="noopener" className="ml-1 text-xs font-normal">{c.url.replace(/^https?:\/\/(www\.)?/, '')}</a></div>
+                  <div className="font-medium break-words">{c.name} <a href={c.url} target="_blank" rel="noopener" className="ml-1 text-xs font-normal break-all">{c.url.replace(/^https?:\/\/(www\.)?/, '')}</a></div>
                   <div className="text-xs text-text-2">{[c.provinces.join(', '), c.payments.join(', '), c.model].filter(Boolean).join(' · ') || 'Sin datos de cobertura ni pago'}</div>
                   {c.web?.snippet && <div className="truncate text-xs text-text-3">«{c.web.snippet}» · búsqueda: {c.web.query}</div>}
                 </div>
-                <Button size="sm" icon="check" onClick={() => { confirmCompetitor(c.id); toast(`«${c.name}» confirmado como competidor`) }}>Confirmar</Button>
+                <div className="flex w-full items-center gap-1 sm:ml-auto sm:w-auto">
+                <Button size="sm" className="grow sm:grow-0" icon="check" onClick={() => { confirmCompetitor(c.id); toast(`«${c.name}» confirmado como competidor`) }}>Confirmar</Button>
                 <IconButton size="sm" icon="edit" label="Corregir ficha" onClick={() => setEdit(c)} />
                 <IconButton size="sm" icon="delete" label="Eliminar esta ficha" onClick={async () => { if (await confirmBox(`¿Eliminar «${c.name}»?`, 'Se borra su ficha. Si vuelve a aparecer en una búsqueda, se creará de nuevo (para que no vuelva, usa Descartar).', 'Eliminar', true)) { await collapseRows([c.id]); removeCompetitor(c.id); toast(`«${c.name}» eliminado`) } }} />
                 <IconButton size="sm" icon="block" label="Descartar: no es un competidor (no volverá a aparecer)" onClick={async () => { await collapseRows([c.id]); deleteCompetitor(c.id); toast(`«${c.name}» descartado`) }} />
+                </div>
               </div>
             ))}
           </div>
@@ -285,11 +287,11 @@ export function CompetitorsTab({ brand }: { brand: string }) {
       <Card>
         <div className="mb-4"><WebResearch compact /></div>
         <CardHead title="Competidores detectados" sub="La IA los detecta en los comentarios de tus seguimientos y en Internet (Google) al generar cada informe, y rellena su ficha. Puedes corregir cualquier dato; lo corregido no se sobrescribe." />
-        {!comps.length ? <Empty icon={<Icon name="travel_explore" />} title="Aún no hay competidores detectados">Genera un informe de competencia: la IA buscará a la competencia en tus seguimientos de comentarios. Para analizar a un competidor a fondo, añade sus publicaciones de Facebook a un seguimiento.</Empty> : (
+        {!comps.length ? <Empty icon={<Icon name="travel_explore" />} title="Aún no hay competidores detectados">Genera un informe de competencia: la IA buscará a la competencia en tus seguimientos de comentarios. Para analizar a un competidor a fondo, añade sus publicaciones de Facebook a un seguimiento.</Empty> : sorted.length > 0 && (
           <div className="divide-y divide-outline-2 overflow-hidden rounded-2xl border border-outline-2">
             {sorted.map((c) => (
-              <div key={c.id} data-row-id={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name={c.page ? 'storefront' : 'travel_explore'} className="!text-[20px]" /></span>
+              <div key={c.id} data-row-id={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-3 min-[400px]:px-4">
+                <span className="hidden size-9 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container min-[360px]:grid"><Icon name={c.page ? 'storefront' : 'travel_explore'} className="!text-[20px]" /></span>
                 <div className="min-w-[min(100%,12rem)] flex-1">
                   <div className="font-medium">{c.name}{c.rating != null && <span className="ml-2 text-xs text-text-2">★ {c.rating}</span>}</div>
                   <div className="text-xs text-text-2">{c.provinces.join(', ') || 'Sin presencia detectada'}{c.payments.length ? ' · ' + c.payments.join(', ') : ''}{c.deliveryHours ? ` · ${c.deliveryHours <= 48 ? c.deliveryHours + ' h' : Math.round(c.deliveryHours / 24) + ' días'}` : ''}</div>
@@ -299,9 +301,11 @@ export function CompetitorsTab({ brand }: { brand: string }) {
                     {c.telegram && <a href={c.telegram.url} target="_blank" rel="noopener" className="rounded-md bg-secondary-container px-1.5 py-0.5 text-on-secondary-container no-underline">Telegram: {c.telegram.title}{c.telegram.combos ? ` · ${c.telegram.combos} combos` : ''}</a>}
                   </div>}
                 </div>
+                <div className="ml-auto flex shrink-0 items-center">
                 <IconButton size="sm" icon="edit" label="Corregir ficha" onClick={() => setEdit(c)} />
                 <IconButton size="sm" icon="delete" label="Eliminar esta ficha" onClick={async () => { if (await confirmBox(`¿Eliminar «${c.name}»?`, 'Se borra su ficha y sus datos. Si vuelve a aparecer en los comentarios o en una búsqueda, se creará de nuevo (para que no vuelva, usa Descartar).', 'Eliminar', true)) { await collapseRows([c.id]); removeCompetitor(c.id); toast(`«${c.name}» eliminado`) } }} />
                 <IconButton size="sm" icon="block" label="Descartar: no es un competidor (no volverá a aparecer)" onClick={async () => { if (await confirmBox('¿Descartar este competidor?', `«${c.name}» se quitará y la IA no lo volverá a crear aunque aparezca en los comentarios.`, 'Descartar', true)) { await collapseRows([c.id]); deleteCompetitor(c.id) } }} />
+                </div>
               </div>
             ))}
           </div>
@@ -339,9 +343,9 @@ export function CompHistoryTab() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs text-text-2">Desde<Input type="date" className="!h-10" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-        <label className="text-xs text-text-2">Hasta<Input type="date" className="!h-10" value={to} onChange={(e) => setTo(e.target.value)} /></label>
-        {(from || to) && <Button variant="outlined" icon="summarize" className="self-end" onClick={() => consolidate(shown)}>Consolidado del periodo ({shown.length})</Button>}
+        <label className="w-full text-xs text-text-2 sm:w-auto">Desde<Input type="date" className="!h-10" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="w-full text-xs text-text-2 sm:w-auto">Hasta<Input type="date" className="!h-10" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        {(from || to) && <Button variant="outlined" icon="summarize" className="w-full self-end sm:w-auto" onClick={() => consolidate(shown)}>Consolidado del periodo ({shown.length})</Button>}
         <span className="flex-1" />
         {ids.length > 0 && <>
           <Button icon="summarize" onClick={() => consolidate(shown.filter((r) => sel.has(r.id)))}>Consolidado ({ids.length})</Button>
@@ -397,14 +401,15 @@ export function CompReportsTab() {
         {withRuns.map(({ a, rs }) => {
           const last = rs[0], m = last.model as CompModel
           return (
-            <div key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name="radar" /></span>
+            <div key={a.id} className="flex flex-wrap items-center gap-3 px-3 py-3 min-[400px]:px-4">
+              <span className="hidden size-10 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container min-[360px]:grid"><Icon name="radar" /></span>
               <div className="min-w-[min(100%,12rem)] flex-1">
                 <div className="font-medium">{analysisName(a.provinces)}</div>
                 <div className="text-xs text-text-2">Última actualización: {new Date(last.createdAt).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' })} · {rs.length} {rs.length === 1 ? 'actualización' : 'actualizaciones'}</div>
                 {last.headline && <div className="mt-0.5 line-clamp-2 text-sm text-text-2">{last.headline}</div>}
               </div>
-              <div className="flex flex-wrap gap-1">
+              {/* en pantallas estrechas los botones ocupan todo el ancho */}
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:gap-1 [&>button]:grow sm:[&>button]:grow-0">
                 <Button size="sm" icon="description" onClick={() => setView({ html: compHtml(m), title: compTitle(m), file: compFileName(m.brand, m.generatedAt || last.createdAt), model: m })}>Ver informe</Button>
                 {rs.length > 1 && <Button size="sm" variant="tonal" icon="timeline" onClick={() => setView({ html: consolidatedHtml(rs), title: `Evolución de la competencia - ${analysisName(a.provinces)} - ${m.brand}`, file: `Evolución de la competencia - ${analysisName(a.provinces)} - ${m.brand}-${stamp(Date.now())}` })}>Evolución</Button>}
                 <Button size="sm" variant="text" icon="refresh" onClick={() => { setRun({ tab: 'new' }); nav('/competencia') }}>Actualizar</Button>

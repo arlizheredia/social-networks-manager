@@ -11,7 +11,7 @@ export function PublishTabs() {
   const tab = pathname.startsWith('/publicar/grupos') ? 'grupos' : 'nueva'
   return (
     <Tabs value={tab} onChange={(t) => nav(t === 'grupos' ? '/publicar/grupos' : '/publicar')} tabs={[
-      { id: 'nueva', label: 'Nueva publicación', icon: 'send' },
+      { id: 'nueva', label: 'Nueva publicación', short: 'Publicar', icon: 'send' },
       { id: 'grupos', label: 'Grupos', icon: 'group', badge: n || undefined },
     ]} />
   )

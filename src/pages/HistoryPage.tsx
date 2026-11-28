@@ -76,10 +76,10 @@ function PublishHistory() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-2">
-        <Button icon="today" className="self-end" onClick={() => { const d = ymd(Date.now()); nav(`/informes?tipo=difusion&desde=${d}&hasta=${d}`) }}>Informe diario</Button>
-        <label className="text-xs text-text-2">Desde<Input type="date" className="!h-10" max={ymd(Date.now())} value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value) }} /></label>
-        <label className="text-xs text-text-2">Hasta<Input type="date" className="!h-10" max={ymd(Date.now())} value={to} onChange={(e) => { setTo(e.target.value); if (e.target.value < from) setFrom(e.target.value) }} /></label>
-        <Button variant="outlined" icon="summarize" className="self-end" onClick={() => nav(`/informes?tipo=difusion&desde=${from}&hasta=${to}`)}>{from === to ? 'Informe del día' : 'Informe del periodo'}</Button>
+        <Button icon="today" className="w-full self-end sm:w-auto" onClick={() => { const d = ymd(Date.now()); nav(`/informes?tipo=difusion&desde=${d}&hasta=${d}`) }}>Informe diario</Button>
+        <label className="w-full text-xs text-text-2 sm:w-auto">Desde<Input type="date" className="!h-10" max={ymd(Date.now())} value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value) }} /></label>
+        <label className="w-full text-xs text-text-2 sm:w-auto">Hasta<Input type="date" className="!h-10" max={ymd(Date.now())} value={to} onChange={(e) => { setTo(e.target.value); if (e.target.value < from) setFrom(e.target.value) }} /></label>
+        <Button variant="outlined" icon="summarize" className="w-full self-end sm:w-auto" onClick={() => nav(`/informes?tipo=difusion&desde=${from}&hasta=${to}`)}>{from === to ? 'Informe del día' : 'Informe del periodo'}</Button>
         <span className="flex-1" />
         <Button variant="text" icon="delete_sweep" className="self-end" onClick={async () => { if (await confirmBox('¿Borrar todo el historial de publicaciones?', 'Esta acción no afecta a lo publicado en Facebook ni a tus grupos.', 'Borrar', true)) { setPub({ history: [], runId: null, runIds: [] }); toast('Historial borrado') } }}>Borrar historial</Button>
       </div>
@@ -109,8 +109,8 @@ function TrackingHistory() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs text-text-2">Desde<Input type="date" className="!h-10" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-        <label className="text-xs text-text-2">Hasta<Input type="date" className="!h-10" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <label className="w-full text-xs text-text-2 sm:w-auto">Desde<Input type="date" className="!h-10" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="w-full text-xs text-text-2 sm:w-auto">Hasta<Input type="date" className="!h-10" value={to} onChange={(e) => setTo(e.target.value)} /></label>
         <span className="flex-1" />
         {ids.length > 0 && <>
           <Button variant="outlined" icon="forum" onClick={async () => { if (await openTrackingComments(ids)) nav('/comentarios/explorar') }}>Ver comentarios ({ids.length})</Button>
@@ -152,7 +152,7 @@ export default function HistoryPage() {
   return (
     <div>
       <PageHead title="Historial" sub="Todo lo publicado en tus grupos, los seguimientos de comentarios y los informes de competencia." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pub', label: 'Publicaciones en grupos', icon: 'send', badge: pend || undefined }, { id: 'seg', label: 'Seguimientos de comentarios', icon: 'track_changes' }, { id: 'comp', label: 'Competencia', icon: 'radar' }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pub', label: 'Publicaciones en grupos', short: 'Publicaciones', icon: 'send', badge: pend || undefined }, { id: 'seg', label: 'Seguimientos de comentarios', short: 'Seguimientos', icon: 'track_changes' }, { id: 'comp', label: 'Competencia', icon: 'radar' }]} />
       <div key={tab} className="anim-page">{tab === 'pub' ? <PublishHistory /> : tab === 'seg' ? <TrackingHistory /> : <CompHistoryTab />}</div>
     </div>
   )

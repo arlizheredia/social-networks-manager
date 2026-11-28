@@ -80,25 +80,29 @@ function Analyses({ brand }: { brand: string }) {
             {analyses.map((a) => {
               const rs = runsOf(hist.list, a), last = rs[0], isRun = run0.active === a.id && !!step
               return (
-                <div key={a.id} data-row-id={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name={isRun ? 'progress_activity' : 'radar'} className={isRun ? 'animate-spin' : ''} /></span>
-                  <div className="min-w-[min(100%,12rem)] flex-1">
-                    <div className="font-medium">{analysisName(a.provinces)}</div>
-                    <div className="text-xs text-text-2">Comentarios desde el {fmtDay(a.since)} · {last ? `actualizado ${ago(last.createdAt)} · ${countTxt(rs.length, 'actualización', 'actualizaciones')}` : 'sin actualizar todavía'}</div>
+                <div key={a.id} data-row-id={a.id} className="flex items-start gap-3 px-3 py-3 min-[400px]:px-4">
+                  <span className="hidden size-10 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container min-[360px]:grid"><Icon name={isRun ? 'progress_activity' : 'radar'} className={isRun ? 'animate-spin' : ''} /></span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium">{analysisName(a.provinces)}</div>
+                        <div className="text-xs text-text-2">Comentarios desde el {fmtDay(a.since)} · {last ? `actualizado ${ago(last.createdAt)} · ${countTxt(rs.length, 'actualización', 'actualizaciones')}` : 'sin actualizar todavía'}</div>
+                      </div>
+                      <IconButton size="sm" icon="delete" label="Eliminar el análisis y sus informes" disabled={isRun} onClick={async () => { if (await confirmBox(`¿Eliminar el análisis «${analysisName(a.provinces)}»?`, `Se borrarán sus ${countTxt(rs.length, 'informe', 'informes')}. Las fichas de la competencia se conservan.`, 'Eliminar', true)) { await collapseRows([a.id]); await deleteAnalysis(a); toast('Análisis eliminado') } }} />
+                    </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-text-2">
                       <Icon name="event_repeat" className="!text-[16px]" />
                       <select aria-label="Actualización automática" className="rounded-md border border-outline-2 bg-surface px-1.5 py-0.5 text-xs text-text" value={a.every || '2weeks'} onChange={(e) => setAnalysisEvery(a.id, e.target.value as Every)}>
                         {(Object.keys(EVERY_TXT) as Every[]).map((k) => <option key={k} value={k}>{EVERY_TXT[k]}</option>)}
                       </select>
-                      <span>· próxima: {(() => { const t = nextRunAt(a, hist.list); return t <= Date.now() ? 'en cuanto sea posible' : new Date(t).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }) })()}</span>
+                      <span>Próxima: {(() => { const t = nextRunAt(a, hist.list); return t <= Date.now() ? 'en cuanto sea posible' : new Date(t).toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' }) })()}</span>
                     </div>
                     {last?.headline && <div className="mt-0.5 line-clamp-2 text-sm text-text-2">{last.headline}</div>}
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    <Button size="sm" icon={isRun ? 'open_in_full' : 'refresh'} disabled={(!!step && !isRun) || !!run0.research} onClick={() => (isRun ? setRun({ bg: false }) : run(a))} title={isRun ? 'Mostrar la ventana de la actualización' : undefined}>{isRun ? `Actualizando ${pct} %` : 'Actualizar'}</Button>
-                    {last && <Button size="sm" variant="tonal" icon="description" onClick={() => openLatest(a)}>Ver informe</Button>}
-                    {rs.length > 1 && <Button size="sm" variant="text" icon="timeline" onClick={() => openEvolution(a)}>Evolución</Button>}
-                    <IconButton size="sm" icon="delete" label="Eliminar el análisis y sus informes" disabled={isRun} onClick={async () => { if (await confirmBox(`¿Eliminar el análisis «${analysisName(a.provinces)}»?`, `Se borrarán sus ${countTxt(rs.length, 'informe', 'informes')}. Las fichas de la competencia se conservan.`, 'Eliminar', true)) { await collapseRows([a.id]); await deleteAnalysis(a); toast('Análisis eliminado') } }} />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" className="grow sm:grow-0" icon={isRun ? 'open_in_full' : 'refresh'} disabled={(!!step && !isRun) || !!run0.research} onClick={() => (isRun ? setRun({ bg: false }) : run(a))} title={isRun ? 'Mostrar la ventana de la actualización' : undefined}>{isRun ? `Actualizando ${pct} %` : 'Actualizar'}</Button>
+                      {last && <Button size="sm" className="grow sm:grow-0" variant="tonal" icon="description" onClick={() => openLatest(a)}>Ver informe</Button>}
+                      {rs.length > 1 && <Button size="sm" className="grow sm:grow-0" variant="text" icon="timeline" onClick={() => openEvolution(a)}>Evolución</Button>}
+                    </div>
                   </div>
                 </div>
               )
@@ -142,7 +146,7 @@ export default function CompetitionPage() {
   return (
     <div>
       <PageHead title="Competencia" sub={<>Informes de la competencia de <b className="font-medium">{brand}</b> en las provincias del oriente, con lo que dicen tus seguimientos de comentarios.</>} />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'new', label: running ? `Análisis · ${runPct} %` : 'Análisis', icon: running ? 'progress_activity' : 'radar' }, { id: 'comps', label: researching ? 'Competidores · buscando…' : 'Competidores', icon: researching ? 'progress_activity' : 'storefront', badge: nComps || undefined }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'new', label: running ? `Análisis · ${runPct} %` : 'Análisis', short: running ? `${runPct} %` : 'Análisis', icon: running ? 'progress_activity' : 'radar' }, { id: 'comps', label: researching ? 'Competidores · buscando…' : 'Competidores', short: researching ? 'Buscando…' : 'Competidores', icon: researching ? 'progress_activity' : 'storefront', badge: nComps || undefined }]} />
       <div key={tab} className="anim-page">{tab === 'new' ? <Analyses brand={brand} /> : <CompetitorsTab brand={brand} />}</div>
       <p className="mt-4 flex items-center gap-1 text-xs text-text-2"><Icon name="history" className="!text-[16px]" />Cada actualización queda también en Historial › Competencia.</p>
     </div>

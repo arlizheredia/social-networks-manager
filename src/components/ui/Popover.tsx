@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { cn } from '@/lib/cn'
 
 /** Menú desplegable anclado a un botón. */
-export function Popover({ trigger, children, className, align = 'left' }: { trigger: (open: () => void, isOpen: boolean) => ReactNode; children: (close: () => void) => ReactNode; className?: string; align?: 'left' | 'right' }) {
+export function Popover({ trigger, children, className, wrapClassName, align = 'left' }: { trigger: (open: () => void, isOpen: boolean) => ReactNode; children: (close: () => void) => ReactNode; className?: string; /** clases del contenedor del botón (p. ej. para que ocupe el ancho) */ wrapClassName?: string; align?: 'left' | 'right' }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const menu = useRef<HTMLDivElement>(null)
@@ -40,7 +40,7 @@ export function Popover({ trigger, children, className, align = 'left' }: { trig
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
   return (
-    <div ref={ref} className="relative inline-flex">
+    <div ref={ref} className={cn('relative inline-flex', wrapClassName)}>
       {trigger(() => setOpen((o) => !o), open)}
       {open && (
         <div ref={menu} style={pos ?? { left: 0, top: 0 }} className={cn(

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Button, Chip, MenuItem, PageHead, Popover, Tabs, toast } from '@/components/ui'
+import { Button, Chip, IconButton, MenuItem, PageHead, Popover, Tabs, toast } from '@/components/ui'
 import { copyText } from '@/lib/util'
 import { TrackingPanel } from '@/features/comments/components/Tracking'
 import { Obtain } from '@/features/comments/components/Obtain'
@@ -33,25 +33,24 @@ function Explore() {
   const repList = onlyFocus && pred ? list.filter(pred) : list   // el informe usa el mismo conjunto que el resumen
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-xl">{s.meta?.title || 'Publicación'}</h2>
-          <div className="flex flex-wrap gap-x-3 text-xs text-text-2">
-            {s.meta?.platform && <span>{platName(s.meta.platform)}</span>}
-            {s.meta?.postAuthor && <span>· {s.meta.postAuthor}</span>}
-            {s.meta?.source && <span>· {s.meta.source}</span>}
-            {s.meta?.extractedAt && <span>· Obtenido el {new Date(s.meta.extractedAt).toLocaleString('es')}</span>}
-            {s.meta?.url && <a href={s.meta.url} target="_blank" rel="noopener">· Ver publicación</a>}
-          </div>
+      <div className="mb-4 flex flex-wrap items-start gap-x-3 gap-y-2">
+        <div className="min-w-[min(100%,16rem)] flex-1">
+          <h2 className="line-clamp-2 text-xl break-words" title={s.meta?.title || undefined}>{s.meta?.title || 'Publicación'}</h2>
+          <p className="text-xs text-text-2">
+            {[s.meta?.platform && platName(s.meta.platform), s.meta?.postAuthor, s.meta?.source, s.meta?.extractedAt && `Obtenido el ${new Date(s.meta.extractedAt).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}`].filter(Boolean).join(' · ')}
+            {s.meta?.url && <> · <a href={s.meta.url} target="_blank" rel="noopener" className="whitespace-nowrap">Ver publicación</a></>}
+          </p>
         </div>
-        <Popover align="right" trigger={(o) => <Button variant="outlined" icon="content_copy" onClick={o}>Copiar</Button>}>
+        {/* acciones: en el móvil ocupan la fila entera, debajo del título */}
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+        <Popover align="right" wrapClassName="min-w-0 flex-1 sm:flex-none" trigger={(o) => <Button variant="outlined" icon="content_copy" className="w-full !px-3 sm:w-auto sm:!px-5" aria-label="Copiar" title="Copiar" onClick={o}><span className="hidden min-w-0 truncate min-[300px]:inline">Copiar</span></Button>}>
           {(close) => <>
             <div className="px-3 py-1 text-xs text-text-2">Se usarán los {list.length} comentarios filtrados</div>
             <MenuItem icon="table" onClick={async () => { close(); toast((await copyText(toTable(list, '\t'))) ? 'Copiado: pégalo en Excel o Sheets' : 'No se pudo copiar') }}>Como tabla (Excel / Sheets)</MenuItem>
             <MenuItem icon="notes" onClick={async () => { close(); toast((await copyText(toText(list))) ? 'Copiado' : 'No se pudo copiar') }}>Como texto legible</MenuItem>
           </>}
         </Popover>
-        <Popover align="right" trigger={(o) => <Button variant="outlined" icon="download" onClick={o}>Exportar</Button>}>
+        <Popover align="right" wrapClassName="min-w-0 flex-1 sm:flex-none" trigger={(o) => <Button variant="outlined" icon="download" className="w-full !px-3 sm:w-auto sm:!px-5" aria-label="Exportar" title="Exportar" onClick={o}><span className="hidden min-w-0 truncate min-[300px]:inline">Exportar</span></Button>}>
           {(close) => <>
             <div className="px-3 pt-1 pb-0.5 text-xs text-text-2">Informe ({repList.length.toLocaleString('es')} comentarios{onlyFocus && pred ? ` sobre ${focusName(focusQ)}` : ''})</div>
             <MenuItem icon="description" onClick={() => { close(); exportReport('word', repList, s.meta) }}>Informe Word (.doc)</MenuItem>
@@ -64,12 +63,13 @@ function Explore() {
             <MenuItem icon="description" onClick={() => { close(); exportComments('txt', list, s.meta) }}>Texto (.txt)</MenuItem>
           </>}
         </Popover>
-        <Popover align="right" trigger={(o) => <Button variant="text" icon="more_vert" onClick={o} aria-label="Más opciones" />}>
+        <Popover align="right" trigger={(o) => <IconButton icon="more_vert" label="Más opciones" onClick={o} />}>
           {(close) => <>
             <MenuItem icon="add" onClick={() => { close(); setObtain(true) }}>Analizar otra publicación</MenuItem>
             <MenuItem icon="delete" danger onClick={() => { close(); clearExplore(); toast('Datos borrados') }}>Borrar estos datos</MenuItem>
           </>}
         </Popover>
+        </div>
       </div>
       <Tabs value={view} onChange={setView} tabs={[{ id: 'summary', label: 'Resumen', icon: 'insights' }, { id: 'list', label: 'Comentarios', icon: 'forum', badge: s.comments.length.toLocaleString('es') }]} />
       {view === 'summary' ? (
@@ -100,7 +100,7 @@ export default function CommentsPage() {
       <PageHead title="Comentarios" sub="Obtén, analiza y responde los comentarios de Facebook, Instagram y TikTok." />
       <Tabs value={tab} onChange={(t) => nav(t === 'explorar' ? '/comentarios/explorar' : '/comentarios')} tabs={[
         { id: 'seguimiento', label: 'Seguimiento', icon: running ? 'progress_activity' : 'track_changes' },
-        { id: 'explorar', label: 'Analizar y responder', icon: 'insights', badge: n || undefined },
+        { id: 'explorar', label: 'Analizar y responder', short: 'Analizar', icon: 'insights', badge: n || undefined },
       ]} />
       {tab === 'seguimiento' ? <TrackingPanel /> : <Explore />}
     </div>

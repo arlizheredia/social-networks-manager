@@ -115,9 +115,10 @@ function Delta({ label, v, p, suffix = '', unit = '', invert, na }: { label: str
 /** Indicador compacto: icono y etiqueta en una línea, valor debajo. */
 function Tile({ icon, label, value, sub, tone = 'text-primary' }: { icon: string; label: string; value: ReactNode; sub?: string; tone?: string }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-outline-2 bg-surface px-3 py-2">
-      <div className="flex items-start gap-1 text-xs leading-4 text-text-2"><Icon name={icon} className={cn('!text-[16px]', tone)} /><span className="min-w-0">{label}</span></div>
-      <div className="font-display text-xl leading-7 tabular-nums">{value}{sub && <span className="ml-1 text-xs text-text-2">{sub}</span>}</div>
+    <div className="flex min-w-0 flex-col rounded-2xl border border-outline-2 bg-surface px-3 py-2">
+      <div className="flex items-start gap-1 text-xs leading-4 text-text-2"><Icon name={icon} className={cn('shrink-0 !text-[16px]', tone)} /><span className="min-w-0 break-words">{label}</span></div>
+      {/* el número va abajo: en una misma fila quedan alineados aunque una etiqueta ocupe dos líneas */}
+      <div className="mt-auto flex flex-wrap items-baseline gap-x-1 pt-1 font-display text-xl leading-7 tabular-nums">{value}{sub && <span className="text-xs text-text-2">{sub}</span>}</div>
     </div>
   )
 }
@@ -237,12 +238,12 @@ export default function HomePage() {
   ].filter((a) => a.at).sort((a, b) => b.at - a.at)
 
   const stats = (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-2 min-[260px]:grid-cols-2 sm:grid-cols-3">
       <Tile icon="group" label="Grupos activos" value={<CountUp value={activeGroups(pub).length} />} />
       <Tile icon="send" tone="text-success" label="Publicados hoy" value={<CountUp value={day} />} sub={`/ ${fmtNum(pub.settings.dayCap)}`} />
       <Tile icon="pending" tone="text-warn" label="En aprobación" value={<CountUp value={aw} />} />
       <Tile icon="track_changes" label="Publicaciones seguidas" value={<CountUp value={posts.length} />} />
-      <Tile icon="forum" label="Comentarios nuevos (30 días)" value={<CountUp value={comments30} />} />
+      <Tile icon="forum" label="Comentarios nuevos" value={<CountUp value={comments30} />} sub="en 30 días" />
       <Tile icon="storefront" label="Competidores" value={<CountUp value={rivals.length} />} />
     </div>
   )
