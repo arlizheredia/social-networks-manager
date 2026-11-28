@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { collapseRows } from '@/lib/motion'
 import { PublishTabs } from './PublishTabs'
-import { Banner, Button, Card, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, PageHead, Popover, Switch, Textarea, Toggle, confirmBox, toast } from '@/components/ui'
+import { Banner, Button, Card, Chip, Dialog, Empty, Field, FullEditor, Icon, IconButton, Input, MenuItem, PageHead, Popover, Switch, Textarea, Toggle, confirmBox, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { copyText, download, fmtRelative } from '@/lib/util'
 import { downloadWord, printPdf, reportTextToHtml } from '@/lib/docexport'
@@ -136,6 +136,7 @@ function ReportDialog({ open, onClose, checked }: { open: boolean; onClose: () =
   const file = `grupos-${{ active: 'activos', all: 'todos', sel: 'seleccionados' }[scope]}${tagF.size === 1 ? '-' + [...tagF][0].replace(/\s+/g, '-') : ''}-${new Date().toISOString().slice(0, 10)}`
   const rtags = allTags(groups)
   const title = text.split('\n')[0]
+  const [full, setFull] = useState(false)
   return (
     <Dialog open={open} onClose={onClose} title="Reporte de grupos" wide
       actions={<><Button variant="text" onClick={onClose}>Cerrar</Button><Button variant="outlined" icon="content_copy" onClick={async () => toast((await copyText(text)) ? 'Reporte copiado' : 'No se pudo copiar')}>Copiar</Button><Button variant="outlined" icon="description" onClick={() => downloadWord(file, title, reportTextToHtml(text), true)}>Word</Button><Button icon="picture_as_pdf" onClick={() => printPdf(title, reportTextToHtml(text), true)}>PDF</Button></>}>
@@ -152,7 +153,18 @@ function ReportDialog({ open, onClose, checked }: { open: boolean; onClose: () =
       <div className="mb-3 flex flex-wrap items-center gap-2"><span className="text-xs text-text-2">Incluir:</span>
         {(['link', 'tags', 'notes', 'last'] as const).map((k) => <Chip key={k} selected={inc[k]} onClick={() => setInc({ ...inc, [k]: !inc[k] })}>{{ link: 'Enlace', tags: 'Etiqueta', notes: 'Notas', last: 'Último uso' }[k]}</Chip>)}
       </div>
-      <Field label="Texto del reporte · Word y PDF en hoja Carta, Arial 12, blanco y negro"><Textarea rows={9} className="min-h-40 font-mono text-xs" value={text} onChange={(e) => setText(e.target.value)} /></Field>
+      <Field label="Texto del reporte · Word y PDF en hoja Carta, Arial 12, blanco y negro">
+        <div className="relative">
+          <Textarea rows={9} className="min-h-40 pr-12 font-mono text-xs" value={text} onChange={(e) => setText(e.target.value)} />
+          <IconButton icon="open_in_full" label="Editar a pantalla completa" className="!absolute top-1.5 right-1.5 bg-surface/90" onClick={() => setFull(true)} />
+        </div>
+      </Field>
+      <FullEditor open={full} onClose={() => setFull(false)} title="Reporte de grupos" value={text} onChange={setText}
+        actions={<>
+          <Button size="sm" variant="outlined" icon="content_copy" onClick={async () => toast((await copyText(text)) ? 'Reporte copiado' : 'No se pudo copiar')}>Copiar</Button>
+          <Button size="sm" variant="outlined" icon="description" onClick={() => downloadWord(file, title, reportTextToHtml(text), true)}>Word</Button>
+          <Button size="sm" icon="picture_as_pdf" onClick={() => printPdf(title, reportTextToHtml(text), true)}>PDF</Button>
+        </>} />
     </Dialog>
   )
 }

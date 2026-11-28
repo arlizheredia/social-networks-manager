@@ -2,7 +2,7 @@ import { CompReportsTab } from '@/features/competition/components'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFitHeight } from '@/lib/useFitHeight'
 import { useSearchParams } from 'react-router-dom'
-import { Banner, Button, Card, Chip, Dialog, Empty, Field, Icon, Input, MenuItem, PageHead, Popover, Select, Tabs, Textarea, toast, confirmBox } from '@/components/ui'
+import { Banner, Button, Card, Chip, Dialog, Empty, Field, FullEditor, Icon, IconButton, Input, MenuItem, PageHead, Popover, Select, Tabs, Textarea, toast, confirmBox } from '@/components/ui'
 import { copyRich, copyText } from '@/lib/util'
 import { downloadHtml, downloadWord, printPdf, reportTextToHtml } from '@/lib/docexport'
 import { generate, useAI, withTask } from '@/features/ai/engine'
@@ -141,9 +141,9 @@ function CommentsReport() {
             <Chip selected={isPre(null)} onClick={() => presetR(null)}>Todos</Chip>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-text-2">Desde<Input type="date" className="!h-10" value={rng.from} max={rng.to || undefined} onChange={(e) => setRng({ ...rng, from: e.target.value })} /></label>
-            <label className="text-xs text-text-2">Hasta<Input type="date" className="!h-10" value={rng.to} min={rng.from || undefined} onChange={(e) => setRng({ ...rng, to: e.target.value })} /></label>
-            <label className="text-xs text-text-2">Según la fecha<Select className="!h-10" value={rng.basis} onChange={(e) => setRng({ ...rng, basis: e.target.value as 'comment' | 'extraction' })}><option value="comment">del comentario</option><option value="extraction">de extracción</option></Select></label>
+            <label className="w-full text-xs text-text-2 sm:w-auto">Desde<Input type="date" className="!h-10" value={rng.from} max={rng.to || undefined} onChange={(e) => setRng({ ...rng, from: e.target.value })} /></label>
+            <label className="w-full text-xs text-text-2 sm:w-auto">Hasta<Input type="date" className="!h-10" value={rng.to} min={rng.from || undefined} onChange={(e) => setRng({ ...rng, to: e.target.value })} /></label>
+            <label className="w-full text-xs text-text-2 sm:w-auto">Según la fecha<Select className="!h-10" value={rng.basis} onChange={(e) => setRng({ ...rng, basis: e.target.value as 'comment' | 'extraction' })}><option value="comment">del comentario</option><option value="extraction">de extracción</option></Select></label>
           </div>
           <p className="mt-2 text-xs text-text-2">Se analizan los comentarios de ese periodo en las publicaciones actuales de los seguimientos elegidos{rng.from && rng.to ? ', y se comparan con el periodo anterior de la misma duración' : ''}. «De extracción» es el día en que la app vio el comentario por primera vez (útil para el informe diario de lo nuevo).</p>
         </div>
@@ -186,6 +186,11 @@ function DiffusionReport() {
   const areaRef = useRef<HTMLTextAreaElement>(null), actionsRef = useRef<HTMLDivElement>(null)
   useFitHeight(areaRef, actionsRef, { margin: 40, deps: [entries.length] })
   const title = file
+  const [full, setFull] = useState(false)
+  const edit = (v: string) => { setText(v); setDirty(true) }
+  const copy = async () => toast((await copyText(text)) ? 'Informe copiado' : 'No se pudo copiar')
+  const word = () => downloadWord(file, title, reportTextToHtml(text), true)
+  const pdf = () => printPdf(title, reportTextToHtml(text), true)
   return (
     <Card>
       <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-4">
@@ -200,13 +205,26 @@ function DiffusionReport() {
           <label key={h.id} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-[var(--primary)]" checked={ids.has(h.id)} onChange={(e) => { const s = new Set(ids); e.target.checked ? s.add(h.id) : s.delete(h.id); setIds(s) }} /><span className="truncate">{entryTitle(h).slice(0, 90)}</span></label>
         ))}</div>
       ) : <p className="mb-4 text-text-2">No hay publicaciones {lo === hi ? 'en esa fecha' : 'en ese periodo'}.</p>}
-      <Field label="Texto del informe · puedes editarlo antes de copiarlo o exportarlo"><Textarea ref={areaRef} className="min-h-40 font-mono text-xs" value={text} onChange={(e) => { setText(e.target.value); setDirty(true) }} /></Field>
+      <Field label="Texto del informe · puedes editarlo antes de copiarlo o exportarlo">
+        <div className="relative">
+          <Textarea ref={areaRef} className="min-h-40 pr-12 font-mono text-xs" value={text} onChange={(e) => edit(e.target.value)} />
+          <IconButton icon="open_in_full" label="Editar a pantalla completa" className="!absolute top-1.5 right-1.5 bg-surface/90" onClick={() => setFull(true)} />
+        </div>
+      </Field>
+      <FullEditor open={full} onClose={() => setFull(false)} title={<>Informe de difusión · {lo === hi ? lo : `${lo} a ${hi}`}</>} value={text} onChange={edit}
+        actions={<>
+          <Button size="sm" variant="outlined" icon="content_copy" onClick={copy}>Copiar</Button>
+          <Button size="sm" variant="outlined" icon="description" onClick={word}>Word</Button>
+          <Button size="sm" icon="picture_as_pdf" onClick={pdf}>PDF</Button>
+        </>} />
       <div ref={actionsRef} className="flex flex-wrap gap-2">
         <Button variant="text" icon="refresh" onClick={async () => { if (!dirty || (await confirmBox('¿Regenerar el informe?', 'Se perderán los cambios que hayas hecho en el texto.', 'Regenerar'))) regen() }}>Regenerar</Button>
-        <span className="flex-1" />
-        <Button variant="outlined" icon="content_copy" onClick={async () => toast((await copyText(text)) ? 'Informe copiado' : 'No se pudo copiar')}>Copiar</Button>
-        <Button variant="outlined" icon="description" onClick={() => downloadWord(file, title, reportTextToHtml(text), true)}>Word</Button>
-        <Button icon="picture_as_pdf" onClick={() => printPdf(title, reportTextToHtml(text), true)}>PDF</Button>
+        {/* en el móvil, los tres botones se reparten el ancho de la fila (sin iconos para que quepa el texto) */}
+        <div className="grid w-full grid-cols-1 gap-2 min-[260px]:grid-cols-3 sm:ml-auto sm:flex sm:w-auto [&>button]:!px-2 max-[399px]:[&_.ms]:!hidden sm:[&>button]:!px-5">
+          <Button variant="outlined" icon="content_copy" onClick={copy}>Copiar</Button>
+          <Button variant="outlined" icon="description" onClick={word}>Word</Button>
+          <Button icon="picture_as_pdf" onClick={pdf}>PDF</Button>
+        </div>
       </div>
     </Card>
   )
@@ -219,7 +237,7 @@ export default function ReportsPage() {
   return (
     <div>
       <PageHead title="Informes" sub="Informes profesionales listos para copiar, Word, PDF o WhatsApp." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'difusion', label: 'Difusión en grupos', icon: 'send' }, { id: 'comentarios', label: 'Análisis de comentarios', icon: 'forum' }, { id: 'competencia', label: 'Análisis de la competencia', icon: 'radar' }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'difusion', label: 'Difusión en grupos', short: 'Difusión', icon: 'send' }, { id: 'comentarios', label: 'Análisis de comentarios', short: 'Comentarios', icon: 'forum' }, { id: 'competencia', label: 'Análisis de la competencia', short: 'Competencia', icon: 'radar' }]} />
       <div key={tab} className="anim-page">{tab === 'comentarios' ? <CommentsReport /> : tab === 'competencia' ? <CompReportsTab /> : <DiffusionReport />}</div>
     </div>
   )
