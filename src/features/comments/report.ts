@@ -232,7 +232,7 @@ function writeTexts(m: ReportModel) {
     const worst = [...A].filter((a) => a.verdict === 'debil').sort((a, b) => b.neg - a.neg)[0]
     S.push(`Por aspectos, se habla sobre todo de ${A.slice(0, 3).map((a) => a.short).join(', ')}${best ? `; lo mejor valorado es ${best.short}` : ''}${worst ? `${best ? ' y' : ';'} el principal punto débil, ${worst.short}` : ''}.`)
   }
-  if (c.st.q) S.push(`Hay ${countTxt(c.st.q, 'pregunta', 'preguntas')}${m.teamOn ? `, y ${countTxt(m.pending, 'comentario sigue', 'comentarios siguen')} sin respuesta del equipo` : ''}.`)
+  if (c.st.q) S.push(`Hay ${countTxt(c.st.q, 'pregunta', 'preguntas')}.`)
   m.summary = S
 
   const C: string[] = []
