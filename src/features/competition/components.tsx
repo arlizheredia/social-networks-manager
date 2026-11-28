@@ -1,5 +1,6 @@
 /** Componentes de la sección Competencia: vista del informe, fichas de competidores, perfil de la marca e historial. */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { collapseRows } from '@/lib/motion'
 import { Button, Card, CardHead, Chip, Dialog, Empty, Field, Icon, IconButton, Input, MenuItem, NumberField, Popover, Switch, Textarea, confirmBox, toast, SkeletonList } from '@/components/ui'
 import { copyRich } from '@/lib/util'
@@ -7,11 +8,12 @@ import { cn } from '@/lib/cn'
 import { downloadHtml, downloadWord, printPdf } from '@/lib/docexport'
 import { reportPlainText } from '@/features/comments/reportHtml'
 import { PAYMENTS, PROVINCES, type Province } from './data'
-import { clearCompetitors, confirmCompetitor, deleteCompReports, removeCompetitor, deleteCompetitor, loadCompHistory, setComp, setRun, useCompRun, upsertCompetitor, useCompHistory, useCompetition, type Competitor, type PriceRef, type SavedCompReport } from './store'
+import { analysisName, runsOf, clearCompetitors, confirmCompetitor, deleteCompReports, removeCompetitor, deleteCompetitor, loadCompHistory, setComp, setRun, useCompRun, upsertCompetitor, useCompHistory, useCompetition, type Competitor, type PriceRef, type SavedCompReport } from './store'
 import { compHtml, compTitle, consolidatedHtml } from './html'
 import { CompDashboard } from './Dashboard'
 import type { CompModel } from './analyze'
 import { researchCompetitor, researchOnWeb } from './websearch'
+import { researchMoreSources } from './adsTelegram'
 import { getPrefs } from '@/features/comments/prefs'
 import { brandKeys } from '@/features/comments/normalize'
 import { useExtension } from '@/features/extension/bridge'
@@ -112,7 +114,7 @@ function CompetitorDialog({ c, onClose }: { c: Competitor | null; onClose: () =>
         <Button variant="text" onClick={onClose}>Cancelar</Button><Button disabled={!!busy} onClick={save}>Guardar</Button>
       </>}>
       <p className="mb-3 text-sm text-text-2">{f.source === 'detectado' ? `Creada por la IA${f.detectedAt ? ' el ' + new Date(f.detectedAt).toLocaleDateString('es') : ''} a partir de ${f.mentions || 0} comentario${f.mentions === 1 ? '' : 's'}${f.page ? ' (incluye su propia página)' : ''}. ` : ''}Corrige lo que no sea exacto: lo que cambies ya no lo sobrescribe la detección automática. Si cambias el nombre o los otros nombres, pulsa «Buscar de nuevo en Internet» para completar la ficha con ellos.{f.manual?.length ? ` Corregido: ${f.manual.length} campo${f.manual.length === 1 ? '' : 's'}.` : ''}</p>
-      <div className="grid gap-x-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
         <Field label="Nombre *"><Input autoFocus maxLength={80} value={f.name} onChange={(e) => up({ name: e.target.value })} placeholder="Ej.: Fagales Market" /></Field>
         <Field label="Otros nombres" hint="Separados por comas: cómo lo escribe la gente."><Input value={f.aliases.join(', ')} onChange={(e) => up({ aliases: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} placeholder="Fagales, Fagales Mkt" /></Field>
       </div>
@@ -120,7 +122,7 @@ function CompetitorDialog({ c, onClose }: { c: Competitor | null; onClose: () =>
       <div className="mb-4"><ProvincePicker value={f.provinces} onChange={(v) => up({ provinces: v })} /></div>
       <div className="mb-1 text-[13px] font-medium text-text-2">Métodos de pago</div>
       <div className="mb-4 flex flex-wrap gap-2">{PAYMENTS.map((p) => <Chip key={p.name} selected={f.payments.includes(p.name)} onClick={() => up({ payments: f.payments.includes(p.name) ? f.payments.filter((x) => x !== p.name) : [...f.payments, p.name] })}>{p.name}</Chip>)}</div>
-      <div className="grid gap-x-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-3">
         <Field label="Plazo de entrega (horas)" hint="0 = sin dato. 5 días = 120."><NumberField value={f.deliveryHours} min={0} max={2000} onChange={(v) => up({ deliveryHours: v })} /></Field>
         <Field label="Calificación (de 5)" hint="Trustpilot u otra; vacío = sin dato."><Input type="number" step="0.1" min={0} max={5} value={f.rating ?? ''} onChange={(e) => up({ rating: e.target.value === '' ? null : Math.max(0, Math.min(5, +e.target.value)) })} /></Field>
         <Field label="Enlace (web o página)"><Input value={f.url} onChange={(e) => up({ url: e.target.value })} placeholder="https://…" /></Field>
@@ -135,10 +137,10 @@ function CompetitorDialog({ c, onClose }: { c: Competitor | null; onClose: () =>
       <div className="mb-1 flex items-center gap-2 text-[13px] font-medium text-text-2"><span className="flex-1">Precios de referencia</span><Button size="sm" variant="text" icon="add" onClick={() => up({ prices: [...f.prices, { product: '', price: 0, currency: 'USD', note: '' }] })}>Añadir precio</Button></div>
       {f.prices.map((p, i) => (
         <div key={i} className="mb-2 flex flex-wrap items-center gap-2">
-          <div className="min-w-40 flex-[2]"><Input className="!h-10" placeholder="Combo / producto" value={p.product} onChange={(e) => setPrice(i, { product: e.target.value })} /></div>
+          <div className="min-w-[min(100%,10rem)] flex-[2]"><Input className="!h-10" placeholder="Combo / producto" value={p.product} onChange={(e) => setPrice(i, { product: e.target.value })} /></div>
           <div className="w-24"><Input className="!h-10" type="number" step="0.01" placeholder="Precio" value={p.price || ''} onChange={(e) => setPrice(i, { price: +e.target.value })} /></div>
           <div className="w-20"><Input className="!h-10" value={p.currency} onChange={(e) => setPrice(i, { currency: e.target.value.toUpperCase().slice(0, 4) })} /></div>
-          <div className="min-w-40 flex-[2]"><Input className="!h-10" placeholder="Observación" value={p.note} onChange={(e) => setPrice(i, { note: e.target.value })} /></div>
+          <div className="min-w-[min(100%,10rem)] flex-[2]"><Input className="!h-10" placeholder="Observación" value={p.note} onChange={(e) => setPrice(i, { note: e.target.value })} /></div>
           <IconButton size="sm" icon="delete" label="Quitar precio" onClick={() => up({ prices: f.prices.filter((_, k) => k !== i) })} />
         </div>
       ))}
@@ -148,17 +150,29 @@ function CompetitorDialog({ c, onClose }: { c: Competitor | null; onClose: () =>
 }
 
 /** Investiga en Internet (Google, por medio de la extensión) la marca y la competencia, y guarda las fichas. */
-export async function runResearch(onStep?: (s: string, pct?: number) => void, opts: { maxAgeMs?: number } = {}) {
-  const st = useCompetition.getState(), prefs = getPrefs().report
+export async function runResearch(onStep?: (s: string, pct?: number) => void, opts: { maxAgeMs?: number; provinces?: Province[] } = {}) {
+  const st0 = useCompetition.getState(), prefs = getPrefs().report
+  // las provincias del análisis que se actualiza (o las elegidas en Competidores)
+  const st = opts.provinces?.length ? { ...st0, provinces: opts.provinces } : st0
   // si se buscó hace poco (p. ej. hoy) para las mismas provincias, se reutiliza: no se repite la búsqueda en Google
-  const key = 'v3|' + st.provinces.join('|') // v3: incluye el análisis de combos
+  const key = 'v4|' + st.provinces.join('|') + (st.adLibrary ? '|ads' : '') + (st.telegram ? '|tg' : '') // v4: anuncios y Telegram
   if (opts.maxAgeMs && st.lastWeb && st.lastWeb.key === key && Date.now() - st.lastWeb.at < opts.maxAgeMs) {
     return { brandProfile: st.brand, brandFound: [], competitors: st.competitors, found: [], refreshed: [], blocked: false, error: '', brand: prefs.client || 'tu marca', reused: true }
   }
   const brand = prefs.client || prefs.terms.split(',')[0]?.trim() || 'tu marca'
-  const r = await researchOnWeb({ provinces: st.provinces, brand, brandKeys: brandKeys(), brandProfile: st.brand, competitors: st.competitors, ignored: st.ignored, onStep })
-  setComp({ brand: r.brandProfile, competitors: r.competitors, ...(r.error ? {} : { lastWeb: { at: Date.now(), key } }) })
-  return { ...r, brand, reused: false }
+  const more = st.adLibrary || st.telegram
+  // Google ocupa la primera parte; la Biblioteca de anuncios y Telegram, el último tramo
+  const r = await researchOnWeb({ provinces: st.provinces, brand, brandKeys: brandKeys(), brandProfile: st.brand, competitors: st.competitors, ignored: st.ignored, onStep: (x, p) => onStep?.(x, p == null ? undefined : more ? p * 0.7 : p) })
+  let competitors = r.competitors, found = r.found, extra = { ads: 0, channels: 0, needsUpdate: false, error: '' }
+  if (more) {
+    try {
+      const m = await researchMoreSources({ provinces: st.provinces, brandKeys: brandKeys(), competitors, ignored: st.ignored, adLibrary: st.adLibrary, telegram: st.telegram, onStep: (x, p) => onStep?.(x || 'Anuncios y Telegram…', p == null ? undefined : 70 + p * 0.3) })
+      competitors = m.competitors; found = [...found, ...m.found]; extra = { ads: m.ads, channels: m.channels, needsUpdate: m.needsUpdate, error: m.error }
+    } catch (e) { extra.error = (e as Error).message }
+  }
+  setComp({ brand: r.brandProfile, competitors, ...(r.error ? {} : { lastWeb: { at: Date.now(), key } }) })
+  if (extra.needsUpdate) toast('Para leer la Biblioteca de anuncios, actualiza la extensión de Chrome a la versión 2.3.6 (Ajustes › Extensión).', 'extension')
+  return { ...r, competitors, found, brand, reused: false, ...extra }
 }
 
 /** Botón y estado de la búsqueda en Internet. */
@@ -176,7 +190,7 @@ export function WebResearch({ compact }: { compact?: boolean }) {
     try {
       const r = await runResearch((x, p) => setBusy(x || 'Buscando…', p))
       if (r.error && !r.brandFound.length && !r.found.length) toast(r.error)
-      else toast([r.brandFound.length ? `${r.brand}: ${r.brandFound.join(', ')}` : `No se encontraron datos nuevos de ${r.brand}`, r.found.length ? `${r.found.length} competidor${r.found.length === 1 ? '' : 'es'} nuevo${r.found.length === 1 ? '' : 's'} por confirmar` : ''].filter(Boolean).join(' · '), 'travel_explore')
+      else toast([r.brandFound.length ? `${r.brand}: ${r.brandFound.join(', ')}` : `No se encontraron datos nuevos de ${r.brand}`, r.found.length ? `${r.found.length} competidor${r.found.length === 1 ? '' : 'es'} nuevo${r.found.length === 1 ? '' : 's'} por confirmar` : '', 'ads' in r && r.ads ? `${r.ads} anuncio${r.ads === 1 ? '' : 's'} activo${r.ads === 1 ? '' : 's'}` : '', 'channels' in r && r.channels ? `${r.channels} canal${r.channels === 1 ? '' : 'es'} de Telegram` : ''].filter(Boolean).join(' · '), 'travel_explore')
     } catch (e) { toast((e as Error).message) } finally { setBusy(null) }
   }
   return (
@@ -215,14 +229,14 @@ function BrandCard({ brand }: { brand: string }) {
       )}
       {b.summary && <p className="mb-4 rounded-2xl bg-surface-2 p-3 text-sm"><b className="font-medium">Propuesta (según el sitio):</b> {b.summary}</p>}
       <div className="mb-1 text-[13px] font-medium text-text-2">Cobertura por provincia{tag('coverage')}</div>
-      <div className="mb-4 grid gap-2 sm:grid-cols-2">{PROVINCES.map((p) => (
-        <label key={p} className="flex items-center gap-2 text-sm"><span className="w-36 shrink-0">{p}</span><Input className="!h-10" placeholder="Sin presencia" value={b.coverage[p] || ''} onChange={(e) => up({ coverage: { ...b.coverage, [p]: e.target.value } })} /></label>
+      <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">{PROVINCES.map((p) => (
+        <label key={p} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"><span className="w-36 shrink-0">{p}</span><div className="min-w-[min(100%,8rem)] flex-1"><Input className="!h-10" placeholder="Sin presencia" value={b.coverage[p] || ''} onChange={(e) => up({ coverage: { ...b.coverage, [p]: e.target.value } })} /></div></label>
       ))}</div>
       {proof('coverage')}
       <div className="mb-1 text-[13px] font-medium text-text-2">Métodos de pago que comunicas{tag('payments')}</div>
       <div className="mb-4 flex flex-wrap gap-2">{PAYMENTS.map((p) => <Chip key={p.name} selected={b.payments.includes(p.name)} onClick={() => up({ payments: b.payments.includes(p.name) ? b.payments.filter((x) => x !== p.name) : [...b.payments, p.name] })}>{p.name}</Chip>)}</div>
       {proof('payments')}
-      <div className="grid gap-x-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
         <Field label={<>Plazo de entrega habitual (horas){tag('deliveryHours')}</>} hint={!man.has('deliveryHours') && ev.deliveryHours ? `«${ev.deliveryHours}»` : undefined}><NumberField value={b.deliveryHours} min={0} max={2000} onChange={(v) => up({ deliveryHours: v })} /></Field>
         <Field label={<>Reseñas verificables{tag('reviews')}</>} hint={!man.has('reviews') && ev.reviews ? `«${ev.reviews}»` : 'Dónde (Trustpilot, Google…); vacío = no hay.'}><Input value={b.reviews} onChange={(e) => up({ reviews: e.target.value })} /></Field>
       </div>
@@ -254,7 +268,7 @@ export function CompetitorsTab({ brand }: { brand: string }) {
             {pending.map((c) => (
               <div key={c.id} data-row-id={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name="public" className="!text-[20px]" /></span>
-                <div className="min-w-48 flex-1">
+                <div className="min-w-[min(100%,12rem)] flex-1">
                   <div className="font-medium">{c.name} <a href={c.url} target="_blank" rel="noopener" className="ml-1 text-xs font-normal">{c.url.replace(/^https?:\/\/(www\.)?/, '')}</a></div>
                   <div className="text-xs text-text-2">{[c.provinces.join(', '), c.payments.join(', '), c.model].filter(Boolean).join(' · ') || 'Sin datos de cobertura ni pago'}</div>
                   {c.web?.snippet && <div className="truncate text-xs text-text-3">«{c.web.snippet}» · búsqueda: {c.web.query}</div>}
@@ -276,10 +290,14 @@ export function CompetitorsTab({ brand }: { brand: string }) {
             {sorted.map((c) => (
               <div key={c.id} data-row-id={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name={c.page ? 'storefront' : 'travel_explore'} className="!text-[20px]" /></span>
-                <div className="min-w-48 flex-1">
+                <div className="min-w-[min(100%,12rem)] flex-1">
                   <div className="font-medium">{c.name}{c.rating != null && <span className="ml-2 text-xs text-text-2">★ {c.rating}</span>}</div>
                   <div className="text-xs text-text-2">{c.provinces.join(', ') || 'Sin presencia detectada'}{c.payments.length ? ' · ' + c.payments.join(', ') : ''}{c.deliveryHours ? ` · ${c.deliveryHours <= 48 ? c.deliveryHours + ' h' : Math.round(c.deliveryHours / 24) + ' días'}` : ''}</div>
                   <div className="text-xs text-text-2">{c.source === 'web' ? 'Encontrado en Internet' : c.source === 'detectado' ? 'Detectado por la IA' : 'Ficha anterior'}{c.mentions ? ` · ${c.mentions} ${c.mentions === 1 ? 'mención' : 'menciones'}` : ''}{c.lastSeen ? ` · visto ${new Date(c.lastSeen).toLocaleDateString('es')}` : ''}{c.page ? ' · tiene página seguida' : ''}{c.manual?.length ? ' · corregido a mano' : ''}</div>
+                  {(c.ads?.active || c.telegram) && <div className="mt-0.5 flex flex-wrap gap-1 text-[11px] font-medium">
+                    {!!c.ads?.active && <a href={c.ads.url} target="_blank" rel="noopener" className="rounded-md bg-primary-container px-1.5 py-0.5 text-on-primary-container no-underline">{c.ads.active} {c.ads.active === 1 ? 'anuncio activo' : 'anuncios activos'}</a>}
+                    {c.telegram && <a href={c.telegram.url} target="_blank" rel="noopener" className="rounded-md bg-secondary-container px-1.5 py-0.5 text-on-secondary-container no-underline">Telegram: {c.telegram.title}{c.telegram.combos ? ` · ${c.telegram.combos} combos` : ''}</a>}
+                  </div>}
                 </div>
                 <IconButton size="sm" icon="edit" label="Corregir ficha" onClick={() => setEdit(c)} />
                 <IconButton size="sm" icon="delete" label="Eliminar esta ficha" onClick={async () => { if (await confirmBox(`¿Eliminar «${c.name}»?`, 'Se borra su ficha y sus datos. Si vuelve a aparecer en los comentarios o en una búsqueda, se creará de nuevo (para que no vuelva, usa Descartar).', 'Eliminar', true)) { await collapseRows([c.id]); removeCompetitor(c.id); toast(`«${c.name}» eliminado`) } }} />
@@ -342,7 +360,7 @@ export function CompHistoryTab() {
         {sorted.map((r) => (
           <div key={r.id} data-row-id={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
             <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={sel.has(r.id)} onChange={(e) => { const s = new Set(sel); e.target.checked ? s.add(r.id) : s.delete(r.id); setSel(s) }} aria-label="Seleccionar informe" />
-            <div className="min-w-48 flex-1">
+            <div className="min-w-[min(100%,12rem)] flex-1">
               <div className="truncate font-medium">Competencia {r.brand} · {r.from === r.to ? new Date(r.from + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }) : `${new Date(r.from + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'short' })} – ${new Date(r.to + 'T12:00').toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}`}</div>
               <div className="truncate text-xs text-text-2">{r.headline} · creado {new Date(r.createdAt).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' })}</div>
             </div>
@@ -353,5 +371,48 @@ export function CompHistoryTab() {
         {!sorted.length && <p className="p-6 text-center text-text-2">No hay informes en esas fechas.</p>}
       </div>
     </div>
+  )
+}
+
+/* ---------- Informes › Análisis de la competencia ---------- */
+/** Informes de cada análisis de competencia: el último (con su panel) y la evolución de sus actualizaciones. */
+export function CompReportsTab() {
+  const nav = useNavigate()
+  const analyses = useCompetition((s) => s.analyses)
+  const { list, loaded } = useCompHistory()
+  useEffect(() => { if (!loaded) loadCompHistory() }, [loaded])
+  const [view, setView] = useState<{ html: string; title: string; file: string; model?: CompModel } | null>(null)
+  if (view) return <CompReportView {...view} dashboard={view.model ? <CompDashboard m={view.model} /> : undefined} back={{ label: 'Volver a los análisis', onClick: () => setView(null) }} />
+  if (!loaded) return <SkeletonList rows={2} />
+  const withRuns = analyses.map((a) => ({ a, rs: runsOf(list, a) })).filter((x) => x.rs.length)
+  if (!withRuns.length) return (
+    <Card><Empty icon={<Icon name="radar" />} title="Aún no hay análisis de la competencia">Créalo en Competencia eligiendo las provincias; cada vez que lo actualices, su informe aparecerá aquí.
+      <div className="mt-3"><Button icon="radar" onClick={() => { setRun({ tab: 'new' }); nav('/competencia') }}>Ir a Competencia</Button></div></Empty></Card>
+  )
+  return (
+    <Card>
+      <h3 className="mb-1 text-lg">Análisis de la competencia</h3>
+      <p className="mb-3 text-sm text-text-2">El informe de cada análisis es el de su última actualización. «Evolución» compara todas sus actualizaciones. Para recoger información nueva, actualízalo en Competencia.</p>
+      <div className="divide-y divide-outline-2 overflow-hidden rounded-2xl border border-outline-2">
+        {withRuns.map(({ a, rs }) => {
+          const last = rs[0], m = last.model as CompModel
+          return (
+            <div key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container"><Icon name="radar" /></span>
+              <div className="min-w-[min(100%,12rem)] flex-1">
+                <div className="font-medium">{analysisName(a.provinces)}</div>
+                <div className="text-xs text-text-2">Última actualización: {new Date(last.createdAt).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' })} · {rs.length} {rs.length === 1 ? 'actualización' : 'actualizaciones'}</div>
+                {last.headline && <div className="mt-0.5 line-clamp-2 text-sm text-text-2">{last.headline}</div>}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                <Button size="sm" icon="description" onClick={() => setView({ html: compHtml(m), title: compTitle(m), file: compFileName(m.brand, m.generatedAt || last.createdAt), model: m })}>Ver informe</Button>
+                {rs.length > 1 && <Button size="sm" variant="tonal" icon="timeline" onClick={() => setView({ html: consolidatedHtml(rs), title: `Evolución de la competencia - ${analysisName(a.provinces)} - ${m.brand}`, file: `Evolución de la competencia - ${analysisName(a.provinces)} - ${m.brand}-${stamp(Date.now())}` })}>Evolución</Button>}
+                <Button size="sm" variant="text" icon="refresh" onClick={() => { setRun({ tab: 'new' }); nav('/competencia') }}>Actualizar</Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Card>
   )
 }

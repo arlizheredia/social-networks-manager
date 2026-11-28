@@ -77,6 +77,14 @@ export function compHtml(m: CompModel) {
   if (m.prices.length) H.push('<h3>2.2 Precios detectados</h3>', table(['Competidor', 'Producto / combo', 'Precio', 'Observación'], m.prices.map((p) => [p.competitor, p.product, p.price, p.note])))
   H.push(comparisonHtml(m))
   H.push(combosHtml(m))
+  // 2.5 publicidad activa y canales de Telegram
+  if (m.adsTg?.ads.length || m.adsTg?.telegram.length) {
+    H.push('<h3>2.5 Publicidad activa y canales de Telegram</h3>')
+    if (m.adsTg.ads.length) H.push('<p>Anuncios activos en Facebook e Instagram según la Biblioteca de anuncios de Meta: quién invierte ahora en captar clientes y con qué ofertas.</p>',
+      table(['Competidor', 'Anuncios activos', 'Desde', 'Oferta anunciada'], m.adsTg.ads.map((a) => [a.name, String(a.active), a.since || '—', a.prices || a.sample.slice(0, 140) || '—'])))
+    if (m.adsTg.telegram.length) H.push('<p>Canales públicos de Telegram donde publican catálogo y precios.</p>',
+      table(['Competidor', 'Canal', 'Combos publicados', 'Precios'], m.adsTg.telegram.map((t) => [t.name, `${t.channel} (${t.url.replace(/^https?:\/\//, '')})`, String(t.combos || '—'), t.prices || '—'])))
+  }
   if (m.detected.length) H.push(`<p class="muted">Detectados en comentarios sin ficha: ${esc(m.detected.map((d) => `${d.name} (${d.n})`).join(', '))}.</p>`)
 
   H.push(`<h2>3. Consolidación por provincia</h2>`)

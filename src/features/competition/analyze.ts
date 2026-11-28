@@ -49,6 +49,8 @@ export interface ProvinceRow { name: Province; present: string[]; strongPay: str
 export interface CompModel {
   brand: string; author: string; from: string; to: string; period: string; provinces: Province[]; generatedAt: string; network: string
   sources: { tracks: { name: string; date: string }[]; comments: number }
+  /** Publicidad activa (Biblioteca de anuncios de Meta) y canales de Telegram de la competencia. */
+  adsTg?: { ads: { name: string; active: number; since: string; sample: string; prices: string }[]; telegram: { name: string; channel: string; url: string; combos: number; prices: string; sample: string }[] }
   summary: string[]; mainRec: string
   threats: Threat[]
   payEco: { zelle: string[]; byCompetitor: { name: string; payments: string[] }[]; brandHasZelle: boolean }
@@ -191,6 +193,9 @@ export async function buildCompetitionModel(opts: {
     if (c.rating != null || c.reputation) B.push(`Reputación: ${c.rating != null ? `${c.rating}/5` : ''}${c.rating != null && c.reputation ? ' · ' : ''}${c.reputation.replace(/\.$/, '')}.`)
     if (ms.length) B.push(`En los comentarios: ${ms.length} ${ms.length === 1 ? 'mención' : 'menciones'}${favor ? `, ${favor} a su favor frente a ${brand}` : ''}.`)
     if (c.prices.length) B.push(`Precios publicados: ${c.prices.slice(0, 3).map((p) => `${p.product} ${p.price} ${p.currency}`).join('; ')}.`)
+    // publicidad activa: invierte en captar clientes ahora mismo
+    if (c.ads?.active) { score += Math.min(3, Math.ceil(c.ads.active / 3)); B.push(`Publicidad activa: ${c.ads.active} ${c.ads.active === 1 ? 'anuncio' : 'anuncios'} en Facebook e Instagram${c.ads.since ? ` (desde el ${c.ads.since})` : ''}.`) }
+    if (c.telegram) B.push(`Canal de Telegram: ${c.telegram.title}${c.telegram.combos ? ` (${c.telegram.combos} combos publicados)` : ''}.`)
     if (!presence.length) score = Math.min(score, 4)
     const headline = !presence.length ? 'referencia de modelo, sin presencia confirmada en las provincias elegidas'
       : pays.includes('Zelle') && h && h <= 48 ? 'pago sin fricción y entrega rápida' : trust ? 'modelo de confianza' : favor ? 'lo mencionan como alternativa a ' + brand : c.rating != null && c.rating >= 4 ? 'reputación consolidada' : 'competidor con presencia local'
@@ -374,6 +379,10 @@ export async function buildCompetitionModel(opts: {
     brand, author: prefs.author, from: opts.from, to: opts.to, period: periodTxt(opts.from, opts.to),
     provinces: provs, generatedAt: new Date().toISOString(), network: 'Facebook',
     sources: { tracks: tracks.map((t) => ({ name: t.name, date: new Date(trackTs(t)).toISOString().slice(0, 10) })), comments: all.length },
+    adsTg: {
+      ads: comps.filter((c) => c.ads?.active).sort((a, b) => (b.ads!.active - a.ads!.active)).map((c) => ({ name: c.name, active: c.ads!.active, since: c.ads!.since, sample: c.ads!.samples[0] || '', prices: c.ads!.prices.slice(0, 3).map((p) => `${p.product} ${p.price} ${p.currency}`).join('; ') })),
+      telegram: comps.filter((c) => c.telegram).map((c) => ({ name: c.name, channel: c.telegram!.title, url: c.telegram!.url, combos: c.telegram!.combos, prices: c.telegram!.prices.slice(0, 3).map((p) => `${p.product} ${p.price} ${p.currency}`).join('; '), sample: c.telegram!.samples[0] || '' })),
+    },
     summary: S, mainRec, threats,
     payEco: { zelle, byCompetitor: threats.filter((t) => t.payments.length).map((t) => ({ name: t.name, payments: t.payments })), brandHasZelle: bp.payments.includes('Zelle') },
     prices, provinceRows,

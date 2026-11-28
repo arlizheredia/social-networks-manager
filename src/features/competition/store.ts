@@ -41,7 +41,13 @@ export interface Competitor {
   page?: boolean
   /** Combos de comida que publica (nombre, precio, peso, contenido, marcas). */
   combos?: Combo[]
+  /** Publicidad activa en Facebook e Instagram (Biblioteca de anuncios de Meta). */
+  ads?: AdsInfo | null
+  /** Canal público de Telegram (catálogo, precios y ofertas). */
+  telegram?: TelegramInfo | null
 }
+export interface AdsInfo { at: number; url: string; active: number; since: string; samples: string[]; prices: PriceRef[] }
+export interface TelegramInfo { at: number; url: string; title: string; samples: string[]; prices: PriceRef[]; combos: number }
 export interface BrandProfile {
   /** Cobertura por provincia («8 municipios», «cabecera provincial»…); vacío = sin presencia. */
   coverage: Partial<Record<Province, string>>
@@ -72,12 +78,21 @@ export interface BrandProfile {
  * ejecución analiza los comentarios desde `since` hasta ese día con las fichas al día, y queda como un informe más
  * del análisis (para ver su evolución).
  */
-export interface Analysis { id: string; provinces: Province[]; createdAt: number; /** inicio del periodo de comentarios (AAAA-MM-DD) */ since: string }
+export interface Analysis { id: string; provinces: Province[]; createdAt: number; /** inicio del periodo de comentarios (AAAA-MM-DD) */ since: string; /** cada cuánto se actualiza solo (por defecto, cada 2 semanas) */ every?: Every }
+export type Every = 'week' | '2weeks' | 'month'
+export const EVERY_DAYS: Record<Every, number> = { week: 7, '2weeks': 14, month: 30 }
+export const EVERY_TXT: Record<Every, string> = { week: 'Semanal', '2weeks': 'Cada 2 semanas', month: 'Mensual' }
+/** Próxima actualización automática de un análisis (desde la última, o desde que se creó). */
+export function nextRunAt(a: Analysis, reports: SavedCompReport[]) {
+  const last = runsOf(reports, a)[0]?.createdAt || a.createdAt
+  return last + EVERY_DAYS[a.every || '2weeks'] * 864e5
+}
+export const setAnalysisEvery = (id: string, every: Every) => setComp((s) => ({ analyses: s.analyses.map((a) => (a.id === id ? { ...a, every } : a)) }))
 /** Clave del conjunto de provincias (orden fijo): dos análisis no pueden tener la misma. */
 export const provKey = (ps: readonly string[]) => PROVINCES.filter((p) => ps.includes(p)).join('|')
 export const analysisName = (ps: readonly string[]) => (ps.length === PROVINCES.length ? 'Todo el oriente' : PROVINCES.filter((p) => ps.includes(p)).join(', '))
 
-interface CompState { analyses: Analysis[]; competitors: Competitor[]; brand: BrandProfile; provinces: Province[]; /** Buscar competidores nuevos en Internet al generar. */ webSearch: boolean; /** Última búsqueda en Internet completa (para no repetirla en el mismo día). */ lastWeb?: { at: number; key: string } | null; /** Detectados que el usuario descartó (no se vuelven a crear). */ ignored: string[] }
+interface CompState { /** Buscar en la Biblioteca de anuncios y en Telegram al actualizar. */ adLibrary: boolean; telegram: boolean; analyses: Analysis[]; competitors: Competitor[]; brand: BrandProfile; provinces: Province[]; /** Buscar competidores nuevos en Internet al generar. */ webSearch: boolean; /** Última búsqueda en Internet completa (para no repetirla en el mismo día). */ lastWeb?: { at: number; key: string } | null; /** Detectados que el usuario descartó (no se vuelven a crear). */ ignored: string[] }
 export const useCompetition = create<CompState>()(persist(() => ({
   analyses: [] as Analysis[],
   competitors: [] as Competitor[],
@@ -86,10 +101,12 @@ export const useCompetition = create<CompState>()(persist(() => ({
   provinces: [...PROVINCES] as Province[],
   ignored: [] as string[],
   webSearch: true as boolean,
+  adLibrary: true as boolean,
+  telegram: true as boolean,
 }), {
-  name: 'snm.competition', version: 5,
+  name: 'snm.competition', version: 6,
   migrate: (p0, v) => {
-    const p = { analyses: [], ignored: [], webSearch: true, ...(p0 as object) } as unknown as CompState
+    const p = { analyses: [], ignored: [], webSearch: true, adLibrary: true, telegram: true, ...(p0 as object) } as unknown as CompState
     // antes el valor inicial era solo Santiago y Guantánamo: pasa a todo el oriente
     if (v < 3 && p.provinces?.length === 2 && p.provinces.includes('Santiago de Cuba') && p.provinces.includes('Guantánamo')) p.provinces = [...PROVINCES]
     return p
@@ -192,11 +209,11 @@ export function syncAnalyses(reports: SavedCompReport[]) {
   if (add.length) setComp((s) => ({ analyses: [...s.analyses, ...add] }))
 }
 /** Crea un análisis nuevo; si ya existe uno con esas provincias, devuelve ese (no se duplica). */
-export function createAnalysis(provinces: Province[], since: string): { analysis: Analysis; existed: boolean } {
+export function createAnalysis(provinces: Province[], since: string, every: Every = '2weeks'): { analysis: Analysis; existed: boolean } {
   const id = provKey(provinces)
   const ex = useCompetition.getState().analyses.find((a) => a.id === id)
   if (ex) return { analysis: ex, existed: true }
-  const analysis: Analysis = { id, provinces: PROVINCES.filter((p) => provinces.includes(p)), createdAt: Date.now(), since }
+  const analysis: Analysis = { id, provinces: PROVINCES.filter((p) => provinces.includes(p)), createdAt: Date.now(), since, every }
   setComp((s) => ({ analyses: [...s.analyses, analysis] }))
   return { analysis, existed: false }
 }

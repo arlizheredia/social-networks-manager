@@ -1,3 +1,4 @@
+import { CompReportsTab } from '@/features/competition/components'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFitHeight } from '@/lib/useFitHeight'
 import { useSearchParams } from 'react-router-dom'
@@ -148,7 +149,7 @@ function CommentsReport() {
         </div>
       )}
       {source === 'open' && !explore.comments.length && <p className="mb-4 text-text-2">No hay comentarios abiertos. Ábrelos en Comentarios › Analizar y responder.</p>}
-      <div className="grid gap-x-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-2">
         <Field label="Enfoque del informe" hint="La IA buscará los comentarios que cumplen este criterio. Déjalo vacío para analizarlos todos."><Input value={opts.focus} onChange={(e) => setOpts({ ...opts, focus: e.target.value })} /></Field>
         <Field label="Temas a vigilar (opcional)" hint="Separados por comas."><Input value={opts.terms} onChange={(e) => setOpts({ ...opts, terms: e.target.value })} /></Field>
         <Field label="Elaborado por"><Input value={opts.author} onChange={(e) => { setOpts({ ...opts, author: e.target.value }); setPrefs({ report: { ...prefs.report, author: e.target.value } }) }} /></Field>
@@ -187,7 +188,7 @@ function DiffusionReport() {
   const title = file
   return (
     <Card>
-      <div className="grid gap-x-4 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-x-4 sm:grid-cols-4">
         <Field label="Desde"><Input type="date" max={ymd(Date.now())} value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value) }} /></Field>
         <Field label="Hasta"><Input type="date" max={ymd(Date.now())} value={to} onChange={(e) => { setTo(e.target.value); if (e.target.value < from) setFrom(e.target.value) }} /></Field>
         <Field label="Elaborado por"><Input maxLength={80} placeholder="Tu nombre" value={meta.author} onChange={(e) => setMeta({ ...meta, author: e.target.value })} /></Field>
@@ -213,12 +214,13 @@ function DiffusionReport() {
 
 export default function ReportsPage() {
   const [params] = useSearchParams()
-  const [tab, setTab] = useState<'comentarios' | 'difusion'>(params.get('tipo') === 'difusion' ? 'difusion' : 'comentarios')
+  // por defecto, la difusión (primera pestaña); los enlaces desde un seguimiento (?t=) o con tipo=comentarios abren el análisis de comentarios
+  const [tab, setTab] = useState<'comentarios' | 'difusion' | 'competencia'>(params.get('t') || params.get('tipo') === 'comentarios' ? 'comentarios' : params.get('tipo') === 'competencia' ? 'competencia' : 'difusion')
   return (
     <div>
       <PageHead title="Informes" sub="Informes profesionales listos para copiar, Word, PDF o WhatsApp." />
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'comentarios', label: 'Comentarios', icon: 'forum' }, { id: 'difusion', label: 'Difusión en grupos', icon: 'send' }]} />
-      {tab === 'comentarios' ? <CommentsReport /> : <DiffusionReport />}
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'difusion', label: 'Difusión en grupos', icon: 'send' }, { id: 'comentarios', label: 'Análisis de comentarios', icon: 'forum' }, { id: 'competencia', label: 'Análisis de la competencia', icon: 'radar' }]} />
+      <div key={tab} className="anim-page">{tab === 'comentarios' ? <CommentsReport /> : tab === 'competencia' ? <CompReportsTab /> : <DiffusionReport />}</div>
     </div>
   )
 }

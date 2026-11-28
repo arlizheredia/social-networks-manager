@@ -25,3 +25,19 @@ describe('Un análisis de competencia por conjunto de provincias', () => {
     expect(runsOf(list, an.find((a) => a.provinces.length === 2)!).map((r) => (r as { id: string }).id)).toEqual(['r2', 'r1'])
   })
 })
+
+describe('Actualización automática de los análisis', () => {
+  it('cada 2 semanas por defecto; semanal y mensual; y los que tocan, del más atrasado al menos', async () => {
+    const { nextRunAt, useCompHistory } = await import('@/features/competition/store')
+    const { dueAnalyses } = await import('@/features/competition/runAnalysis')
+    const D = 864e5, now = Date.UTC(2026, 10, 28)
+    const a = { id: 'A', provinces: ['Holguín'] as never, createdAt: now - 20 * D, since: '2026-11-01' }                 // sin periodicidad: cada 2 semanas
+    const b = { id: 'B', provinces: ['Granma'] as never, createdAt: now - 3 * D, since: '2026-11-01', every: 'week' as const }
+    const c = { id: 'C', provinces: ['Las Tunas'] as never, createdAt: now - 40 * D, since: '2026-11-01', every: 'month' as const }
+    useCompetition.setState({ analyses: [a, b, c] })
+    useCompHistory.setState({ list: [{ ...(rep('rc', ['Las Tunas'], now - 31 * D) as object), analysisId: 'C' } as never], loaded: true })
+    expect(nextRunAt(a, [])).toBe(now - 6 * D)
+    expect(nextRunAt(b, [])).toBe(now + 4 * D)
+    expect(dueAnalyses(now).map((x) => x.id)).toEqual(['A', 'C']) // A venció hace 6 días; C, hace 1
+  })
+})

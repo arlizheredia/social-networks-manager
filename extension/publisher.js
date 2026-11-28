@@ -112,18 +112,20 @@ async function askSitePermission(origins) {
   });
 }
 /* Páginas que se generan con JavaScript: se abren en segundo plano y se lee el texto ya cargado. */
-async function renderedText(url) {
+async function renderedText(url, wait = 1200) {
   let tab;
   try {
     tab = await chrome.tabs.create({url, active: false});
     await new Promise((res) => { const t = setTimeout(res, 12000); const l = (id, info) => { if (id === tab.id && info.status === 'complete') { clearTimeout(t); chrome.tabs.onUpdated.removeListener(l); res(); } }; chrome.tabs.onUpdated.addListener(l); });
-    await sleep(1200);
+    await sleep(wait);
+    // páginas que cargan más al desplazarse (p. ej. la Biblioteca de anuncios): dos desplazamientos antes de leer
+    if (wait > 1200) for (let i = 0; i < 2; i++) { await chrome.scripting.executeScript({target: {tabId: tab.id}, func: () => window.scrollTo(0, document.body ? document.body.scrollHeight : 0)}).catch(() => {}); await sleep(1500); }
     const [r] = await chrome.scripting.executeScript({target: {tabId: tab.id}, func: () => ({title: document.title, text: (document.body ? document.body.innerText : '').slice(0, 20000), links: [...document.querySelectorAll('a[href]')].slice(0, 400).map((a) => ({url: a.href, label: a.textContent || ''}))})});
     return r && r.result;
   } catch { return null; } finally { if (tab) chrome.tabs.remove(tab.id).catch(() => {}); }
 }
 /* Lee hasta `limit` páginas a partir de `seeds`, siguiendo solo enlaces internos relevantes de los orígenes permitidos. */
-async function crawl(seeds, allowed, limit, label, render = true) {
+async function crawl(seeds, allowed, limit, label, render = true, force = false, wait = 1200) {
   const queue = [...seeds], seen = new Set(), pages = [];
   while (queue.length && pages.length < limit) {
     const url = queue.shift();
@@ -132,11 +134,12 @@ async function crawl(seeds, allowed, limit, label, render = true) {
     progress(`Leyendo ${label || new URL(url).hostname}${new URL(url).pathname} (${pages.length + 1})…`);
     let title = '', text = '', links = [];
     try {
+      if (force) throw 0; // se lee directamente en una pestaña (páginas generadas con JavaScript)
       const r = await fetch(url, {credentials: 'omit', cache: 'no-store', redirect: 'follow', signal: AbortSignal.timeout(7000)});
       const type = r.headers.get('content-type') || '';
       if (r.ok && /html/i.test(type)) { const html = (await r.text()).slice(0, 3e6); ({title, text} = pageText(html)); links = linksOf(html, r.url || url); }
     } catch {}
-    if (render && text.length < 150 && (!pages.length || seeds.includes(url))) { const got = await renderedText(url); if (got) { title = got.title || title; text = got.text || text; links = got.links || links; } }
+    if (render && (force || text.length < 150) && (!pages.length || seeds.includes(url))) { const got = await renderedText(url, wait); if (got) { title = got.title || title; text = got.text || text; links = got.links || links; } }
     if (text) pages.push({url, title: title.slice(0, 200), text});
     links.filter((l) => { try { return allowed.has(new URL(l.url).origin) && SITE_KEYS.test(l.url + ' ' + l.label); } catch { return false; } })
       .map((l) => l.url).filter((u) => !seen.has(u) && !/\.(jpe?g|png|gif|webp|pdf|zip|mp4)(\?|$)/i.test(u)).slice(0, 12).forEach((u) => { if (!queue.includes(u)) queue.push(u); });
@@ -157,7 +160,7 @@ async function readSite(job) {
 
 /* Varios sitios a la vez (competidores encontrados): un solo permiso para todos y pocas páginas por sitio. */
 async function readSites(job) {
-  const sites = ((job && job.sites) || []).map((s) => ({key: String(s.key || ''), urls: cleanUrls(s.urls, 6), per: +s.per || 0, render: !!s.render})).filter((s) => s.key && s.urls.length).slice(0, 15);
+  const sites = ((job && job.sites) || []).map((s) => ({key: String(s.key || ''), urls: cleanUrls(s.urls, 6), per: +s.per || 0, render: !!s.render, force: s.render === 'force', wait: Math.max(1200, Math.min(9000, +s.wait || 1200))})).filter((s) => s.key && s.urls.length).slice(0, 24);
   const per = Math.max(1, Math.min(4, +(job && job.perSite) || 2));
   if (!sites.length) return {ok: true, sites: []};
   const origins = [...new Set(sites.flatMap((s) => s.urls.map((u) => new URL(u).origin + '/*')))];
@@ -169,7 +172,7 @@ async function readSites(job) {
     while (next < sites.length) {
       const s = sites[next++];
       const allowed = new Set(s.urls.map((u) => new URL(u).origin));
-      out.push({key: s.key, pages: await crawl(s.urls, allowed, Math.max(1, Math.min(8, s.per || per)), s.key, s.key === 'brand' || s.render)});
+      out.push({key: s.key, pages: await crawl(s.urls, allowed, Math.max(1, Math.min(8, s.per || per)), s.key, s.key === 'brand' || s.render, s.force, s.wait)});
     }
   };
   await Promise.all([worker(), worker(), worker(), worker(), worker()]);
